@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS AI</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+
+<div class="app">
+
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-icon">J</div>
+            <div>
+                <h1>JARVIS</h1>
+                <span>AI Voice Assistant</span>
+            </div>
+        </div>
+
+        <div class="online">
+            <span></span>
+            Online
+        </div>
+    </header>
+
+
+    <main>
+
+        <section class="voice-area">
+
+            <div class="orb" id="orb">
+                <div class="orb-inner">
+                    J
+                </div>
+            </div>
+
+            <h2 id="statusText">
+                How can I help?
+            </h2>
+
+            <p id="subStatus">
+                Tap the microphone and start speaking
+            </p>
+
+        </section>
+
+
+        <section class="conversation" id="conversation">
+
+            <div class="message user-message hidden" id="userBox">
+                <div class="label">You</div>
+                <div id="userMessage"></div>
+            </div>
+
+            <div class="message jarvis-message hidden" id="jarvisBox">
+                <div class="label">JARVIS</div>
+                <div id="jarvisMessage"></div>
+            </div>
+
+        </section>
+
+
+        <button class="mic-button" id="listenBtn">
+            <span>??</span>
+        </button>
+
+        <p class="mic-label">
+            Tap to speak
+        </p>
+
+    </main>
+
+
+    <footer>
+        JARVIS AI • Python • Whisper • SQLite
+    </footer>
+
+</div>
+
+<script src="/script.js"></script>
+
+</body>
+</html>

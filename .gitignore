@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables / secrets
+.env
+
+# Local database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Audio recordings
+audio/*.wav
+audio/*.mp3
+audio/*.m4a
+audio/*.flac
+
+# Generated files
+data/*
+
+# Keep folder placeholders
+!data/.gitkeep
+!audio/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python tools
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
