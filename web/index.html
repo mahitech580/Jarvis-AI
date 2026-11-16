@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#080b12">
     <meta name="description" content="JARVIS full-duplex AI voice assistant">
-    <title>JARVIS AI — Live Voice Assistant</title>
+    <title>JARVIS AI — Web Voice Assistant</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -15,16 +15,43 @@
                 <span class="brand-mark">J</span>
                 <span class="brand-copy">
                     <strong>JARVIS</strong>
-                    <small>PERSONAL AI ASSISTANT</small>
+                    <small>WEB VOICE ASSISTANT</small>
                 </span>
             </a>
-            <div class="connection-pill" id="connectionPill" data-state="idle">
-                <span class="connection-dot"></span>
-                <span id="connectionText">Not connected</span>
+            <div class="topbar-actions">
+                <div class="connection-pill" id="connectionPill" data-state="idle">
+                    <span class="connection-dot"></span>
+                    <span id="connectionText">Not connected</span>
+                </div>
+                <button class="logout-button hidden" id="logoutBtn" type="button">Sign out</button>
             </div>
         </header>
 
-        <main class="main-content">
+        <section class="login-panel" id="loginPanel" aria-labelledby="loginTitle">
+            <div class="login-mark">J</div>
+            <p class="eyebrow">PRIVATE WEB ASSISTANT</p>
+            <h1 id="loginTitle">Welcome to JARVIS</h1>
+            <p class="login-description" id="loginDescription">Checking access settings...</p>
+            <form id="loginForm" class="login-form">
+                <label for="passwordInput">Access password</label>
+                <input
+                    id="passwordInput"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    maxlength="256"
+                    placeholder="Enter your JARVIS password"
+                    required
+                >
+                <button class="mic-button" id="loginButton" type="submit">
+                    <span>Continue</span>
+                </button>
+                <p class="login-error" id="loginError" role="alert"></p>
+            </form>
+            <p class="login-footer">Only people with the access password can start a voice session.</p>
+        </section>
+
+        <main class="main-content" id="mainContent" hidden>
             <section class="voice-panel" aria-labelledby="statusText">
                 <div class="orb-wrap" id="orb">
                     <div class="orb-ring ring-one"></div>
@@ -47,10 +74,10 @@
                 </div>
 
                 <p class="microphone-note">
-                    Microphone permission is required. Speak naturally — JARVIS can listen while speaking and handle tasks in the background.
+                    Allow microphone access. JARVIS can listen while speaking and work on delegated tasks during the conversation.
                 </p>
                 <p class="setup-note" id="setupNote">
-                    GPT-Live voice requires a configured OpenAI API key. Add it to .env and restart the server.
+                    GPT-Live voice requires an enabled OpenAI API project.
                 </p>
             </section>
 
@@ -60,7 +87,7 @@
                         <p class="eyebrow">SESSION TRANSCRIPT</p>
                         <h2>Conversation</h2>
                     </div>
-                    <span class="history-label" id="historyLabel">Local history</span>
+                    <span class="history-label" id="historyLabel">History</span>
                 </div>
                 <div class="conversation-log" id="conversation" role="log" aria-live="polite" aria-relevant="additions text">
                     <div class="empty-state" id="emptyState">
@@ -74,7 +101,7 @@
         <footer class="footer">
             <span>JARVIS AI</span>
             <span>GPT-Live · WebRTC · Python · SQLite</span>
-            <span>Local-first application</span>
+            <span>Browser-only application</span>
         </footer>
     </div>
 
