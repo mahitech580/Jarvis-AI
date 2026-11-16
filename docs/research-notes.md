@@ -14,7 +14,7 @@ The architecture separates:
 - **Conversation:** GPT-Live, configured with a short speaking style and delegation prompt.
 - **Reasoning and tools:** a Responses model configured with hosted web search and JARVIS function tools.
 - **Permissions and execution:** the Python application validates and runs every custom function.
-- **State:** local SQLite text transcripts and recent history.
+- **State:** local SQLite text transcripts with on-demand history retrieval through a registered tool.
 
 This is a closer fit than simply making the old request/response voice pipeline faster. It also avoids introducing a large third-party agent framework before the project needs telephony, multi-provider orchestration, or distributed workers.
 
@@ -95,7 +95,7 @@ Implemented:
 - A Python allowlist with bounded arithmetic, safe URLs, current local date/time, and recent transcript history.
 - The browser handles nested response.event envelopes, collects completed function calls, sends response.item.create results, and resumes backend work with response.create.
 - Input and output transcript fragments are displayed independently because both speakers can overlap.
-- SQLite transcript storage and a short recent-history window for the delegated backend.
+- SQLite transcript storage and an on-demand get_recent_history tool; historical text is returned as tool output rather than inserted into trusted instructions.
 - Graceful session.close handling with session.closed finalization and local microphone cleanup.
 - Desktop Responses API support and an offline FAQ fallback.
 - Thread-safe SQLite access, safer desktop intent routing, request-size limits, same-origin checks, and basic security headers.
@@ -114,7 +114,7 @@ Not implemented or not yet verified:
 
 GPT-Live voice duration and the delegated Responses model/tools are billed separately. Session creation and usage accounting are documented in the Live guides; check current API pricing and project spend limits before testing. ChatGPT subscriptions do not include API credits.
 
-The browser client does not persist microphone recordings. It stores transcript text locally in SQLite when SAVE_CONVERSATION_HISTORY=true. Users can disable new local transcript storage and history injection through the environment setting.
+The browser client does not persist microphone recordings. It stores transcript text locally in SQLite when SAVE_CONVERSATION_HISTORY=true. Users can disable new local transcript storage and recent-history retrieval through the environment setting.
 
 ## Validation checklist
 
@@ -134,7 +134,7 @@ Then, with a configured API key, Chrome or Edge, microphone, and speakers/headph
 8. Ask to open GitHub. Verify that JARVIS returns a user-clickable allowlisted link.
 9. Request an arbitrary URL, shell command, or Python expression. Verify that no unrestricted execution path exists.
 10. Reload the page and verify saved text history is restored.
-11. Set SAVE_CONVERSATION_HISTORY=false and verify that new messages are not saved or injected into future sessions.
+11. Set SAVE_CONVERSATION_HISTORY=false and verify that new messages are not saved and the recent-history tool returns no stored transcript context.
 12. Deny microphone permission, drop the network, and close the session. Verify error feedback, microphone release, and session finalization reporting.
 13. Repeat with different accents, names, numbers, room noise, long pauses, and overlapping speech.
 
