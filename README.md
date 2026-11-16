@@ -1,171 +1,141 @@
-# JARVIS AI — Full-Duplex Voice Assistant
+# JARVIS AI — Browser-Only Voice Assistant
 
-JARVIS is a Python voice assistant with a browser-first, full-duplex conversational experience and a separate desktop mode.
+JARVIS is a web-only, full-duplex AI voice assistant. Users open the hosted website, sign in with a shared access password, allow microphone access, and talk to JARVIS in the browser.
 
-- **Browser live voice:** GPT-Live over WebRTC. It can listen while speaking, keep the conversation open while backend work runs, and return tool results into the conversation.
-- **Desktop assistant:** a local Whisper → intent/command → Responses API (optional) → pyttsx3 pipeline.
+There is no desktop application, no local microphone script, and no separate local run workflow.
 
-The browser voice model and delegated reasoning/tools backend are separate. Flask owns the API key, session creation, local tool execution, and SQLite storage.
+## What the web app does
 
-## What is included
+- **Live voice:** GPT-Live-1 speaks and listens over WebRTC, including natural interruptions.
+- **Delegated reasoning:** a separate Responses model handles research and tool work while the voice conversation continues.
+- **Current web research:** hosted web search is available to the delegated backend.
+- **Approved tools:** current date/time, bounded arithmetic, a fixed website allowlist, search links, and recent transcript history.
+- **Conversation transcript:** browser transcript events are displayed and stored as text in SQLite when history is enabled.
+- **Protected access:** a shared password is required before the browser can create billable voice sessions or call assistant APIs.
+- **Hosted deployment:** Render Blueprint configuration is included in render.yaml.
 
-### Browser GPT-Live experience
-- WebRTC microphone and speaker media tracks, with a data channel for session events and transcripts.
-- Full-duplex conversation: caller and assistant transcripts are handled independently and can overlap.
-- GPT-Live voice layer delegates research and task work to a Responses backend.
-- Hosted web search for current information.
-- Python function tools for local date/time, bounded arithmetic, allowlisted website links, user-opened search links, and recent local history.
-- Backend tool calls are executed by Flask, not by arbitrary code in the browser.
-- Tool results return to the Responses delegation; GPT-Live can explain them aloud while the session remains live.
-- Local conversation transcript persistence, on-demand recent-history retrieval through an assistant tool, usage display, graceful session close, and microphone cleanup.
-- Responsive browser UI with connection states and visible transcripts.
+## Web architecture
 
-### Desktop assistant
-- Local microphone capture with sounddevice and Whisper transcription.
-- Deterministic time/date, website, search, and calculator commands.
-- OpenAI Responses API for open-ended answers when the key is configured.
-- Offline FAQ fallback when there is no API key or a request cannot reach the service.
-- pyttsx3 speech output.
+    Visitor's browser (HTTPS)
+        |  sign-in cookie
+        |  microphone + speaker
+        |  WebRTC audio + event data channel
+        v
+    Flask web service (Render)
+        |-- shared-password sign-in
+        |-- creates GPT-Live session using server-side API key
+        |-- validates and runs allowlisted Python tools
+        |-- stores transcript text in SQLite
+        |
+        +--------------------> OpenAI GPT-Live-1
+        |                         |
+        |                         +--> Responses backend model
+        |                                  |
+        |                                  +--> hosted web_search
+        |                                  +--> JARVIS approved tools
+        |
+        +<-------------------- SDP answer / session events
 
-### Security and privacy
-- The permanent OpenAI API key stays on the Flask server.
-- Browser WebRTC SDP is sent to Flask; Flask creates the Live session and returns only the session ID and SDP answer.
-- Custom functions are allowlisted and validate their arguments. There is no shell, arbitrary Python, arbitrary URL, or unrestricted file-access tool.
-- Local SQLite stores text transcripts, not browser microphone recordings.
-- Set SAVE_CONVERSATION_HISTORY=false to disable new transcript persistence and the recent-history tool.
-- The server binds to 127.0.0.1 by default and is intended for one local user.
-- .env, SQLite databases, audio and generated data are ignored by Git.
+The browser's audio media travels over WebRTC to the Live session after the server exchanges the SDP offer. The permanent OpenAI API key never enters browser JavaScript. See docs/architecture.md.
 
-## Research and architecture
+## Deploy the website
 
-- docs/architecture.md describes browser Live, delegated tools, desktop voice, memory, and trust boundaries.
-- docs/research-notes.md compares GPT-Live, Realtime API, LiveKit Agents, Pipecat, and chained voice pipelines, with official reference links and a manual evaluation checklist.
+The repository includes a Render Blueprint at render.yaml.
 
-## Requirements
+1. Push the main branch to GitHub.
+2. Open the Render Blueprint flow: https://dashboard.render.com/blueprint/new?repo=https%3A%2F%2Fgithub.com%2Fmahitech580%2FJarvis-AI
+3. Connect GitHub and select the mahitech580/Jarvis-AI repository.
+4. Review the jarvis-ai-web service. The Blueprint selects the Free web-service plan in Singapore.
+5. When Render asks for secret values, enter:
+   - OPENAI_API_KEY: an OpenAI project API key with access to GPT-Live-1 and the configured Responses model.
+   - JARVIS_ACCESS_PASSWORD: a strong, private password to protect the website.
+6. Render generates JARVIS_SESSION_SECRET for signed browser sessions.
+7. Apply the Blueprint and wait for the deployment to become live.
+8. Open the generated HTTPS onrender.com URL, enter the access password, allow microphone access, and select Start conversation.
 
-- Python 3.10+; Python 3.11 is a good default for the audio dependencies.
-- An OpenAI project API key with access to GPT-Live and the configured Responses backend model.
-- API billing enabled. GPT-Live voice duration and the delegated Responses model/tools are billed separately.
-- A working microphone and speaker/headphones.
-- A modern browser with WebRTC and microphone support. Chrome or Edge are recommended.
-- Internet access for the live models and search.
+Do not put API keys or passwords in GitHub files, browser code, screenshots, chat messages, or source control.
 
-A ChatGPT subscription does not provide API credits. Check your API project limits and billing before testing live voice.
+### Render Free plan limitations
 
-## Setup — Windows PowerShell
+The Free plan is intended for testing and hobby projects, not production. Free web services can spin down after inactivity and have no persistent disk. This Blueprint stores history in /tmp/jarvis.db; transcript history can be lost when the instance restarts, spins down, or is redeployed. For durable history, move the transcript store to a managed external database before relying on it.
 
-    git clone https://github.com/mahitech580/Jarvis-AI.git
-    cd Jarvis-AI
+The Render service plan and OpenAI API usage are separate. GPT-Live voice duration and delegated Responses model/tool usage are billed by OpenAI. Set project spend limits and monitor usage before sharing the URL.
 
-    py -3.11 -m venv .venv
-    .\.venv\Scripts\Activate.ps1
+## Configure models and privacy
 
-    python -m pip install --upgrade pip
-    pip install -r requirements.txt
-
-    Copy-Item .env.example .env
-    notepad .env
-
-Set your project key in .env:
-
-    OPENAI_API_KEY=your_project_api_key
-
-Do not commit .env or paste the key into browser code.
-
-Start the browser assistant:
-
-    python web_server.py
-
-Open http://127.0.0.1:5000, allow microphone access, then choose **Start conversation**. End the session using the same button so JARVIS can close it gracefully and receive final usage.
-
-Start the desktop assistant separately when needed:
-
-    python app.py
-
-The desktop version uses the local microphone and speaker. Close other applications that are using the microphone if device access fails.
-
-## Configuration
+Render environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| OPENAI_API_KEY | empty | Server-side project API key |
-| LIVE_MODEL | gpt-live-1 | Full-duplex browser voice model |
-| LIVE_BACKEND_MODEL | gpt-6-luna | Delegated reasoning and custom tool selection |
-| AI_MODEL | gpt-6-luna | Desktop Responses API model |
-| WHISPER_MODEL | base | Local desktop Whisper model |
-| DATABASE_PATH | data/jarvis.db | Local SQLite file |
-| SAVE_CONVERSATION_HISTORY | true | Save local text transcripts and enable on-demand recent-history retrieval |
-| TTS_RATE | 165 | Desktop speech rate |
-| TTS_VOLUME | 1.0 | Desktop speech volume |
-| JARVIS_HOST | 127.0.0.1 | Flask bind address; keep local for single-user use |
-| JARVIS_PORT | 5000 | Flask port |
+| OPENAI_API_KEY | required | Server-side OpenAI project key |
+| JARVIS_ACCESS_PASSWORD | required | Shared password for website access |
+| JARVIS_SESSION_SECRET | generated by Render | Signs the browser session cookie |
+| LIVE_MODEL | gpt-live-1 | Full-duplex voice model |
+| LIVE_BACKEND_MODEL | gpt-6-luna | Delegated reasoning model |
+| DATABASE_PATH | /tmp/jarvis.db on Render | SQLite transcript store |
+| SAVE_CONVERSATION_HISTORY | true | Save transcript text and enable history retrieval |
+| SESSION_COOKIE_SECURE | true | Send the session cookie only over HTTPS |
 
-Model names can be changed to another model supported by your OpenAI project.
+You can disable transcript storage by setting SAVE_CONVERSATION_HISTORY=false. The application then returns no previous transcript history to the assistant. Audio recordings are not stored by this web application.
 
-## Browser API endpoints
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | /api/status | Shows configured Live/backend model names and history setting |
-| POST | /api/live/session | Exchanges browser SDP for a GPT-Live WebRTC session |
-| POST | /api/tools/execute | Validates and executes an allowlisted Python function |
-| POST | /api/conversation/message | Saves a user or assistant transcript message |
-| GET | /api/history | Returns recent local transcript text |
-| POST | /api/command | Keeps the legacy text-command interface available |
-
-The browser never receives the project API key. The API key is used only by Flask when it creates a Live session.
-
-## Tools available to the delegated backend
+## Approved tools
 
 | Tool | Behavior |
 |---|---|
-| Hosted web_search | Searches current online information |
-| get_current_datetime | Returns server-local date, time, and timezone |
-| calculate | Evaluates bounded arithmetic using a restricted AST |
-| open_website | Returns a link from a fixed HTTPS allowlist |
-| search_web | Returns an encoded Google search link |
-| get_recent_history | Reads a small number of local transcript messages |
+| get_current_datetime | Returns the server's current local date and time |
+| calculate | Evaluates bounded arithmetic with a restricted Python AST |
+| search_web | Creates a Google search link for the user to open |
+| open_website | Creates a link from a fixed HTTPS website allowlist |
+| get_recent_history | Reads a bounded number of saved user/assistant transcript messages |
+| Hosted web_search | Searches current online information through the Responses backend |
 
-Opening a website or search result creates a link for the user to open. It does not remotely control the user's browser. More powerful tools must add authentication, authorization, explicit confirmation, audit records, and bounded inputs before they are implemented.
+There is no shell, arbitrary Python execution, unrestricted URL opening, email sending, or file-system tool. Website and search tools return links; the user chooses whether to open them.
+
+## Security boundary
+
+This is a single shared-password web application, not a multi-user account system. It currently includes:
+- Server-side API key handling and short-lived WebRTC session negotiation.
+- Signed, HTTP-only, same-site session cookies.
+- Same-origin checks on browser POST requests.
+- A bounded in-memory limit on repeated failed sign-ins.
+- A server-side allowlist for custom tools.
+- Request-size limits and basic security headers.
+
+Before a public or multi-user launch, add individual user accounts, durable rate limiting, user/session isolation in the database, persistent audit logs, alerting, and explicit approval flows for tools with side effects. Do not expose a shared password broadly.
 
 ## Tests
 
-Run the unit suite:
+GitHub Actions checks run on pushes and pull requests:
+- Python source compilation.
+- Unit tests for calculator safety and tool allowlisting.
+- Sign-in and protected API tests.
+- Browser JavaScript syntax validation.
 
+The same checks can be run in CI with these commands:
+
+    python -m compileall -q web_server.py src tests
     python -m unittest discover -s tests -v
+    node --check web/script.js
 
-The tests cover safe arithmetic, website allowlisting, URL encoding, unknown-tool rejection, SQLite message ordering, and intent-routing regressions.
+A green unit test suite does not prove an external GPT-Live session works. Verify the deployed site with a real browser, microphone, speakers/headphones, and an OpenAI API project that has GPT-Live access.
 
-A successful unit test run does not prove that the external Live session, microphone, speakers, or real-time interruption behavior work. Complete the manual browser checklist in docs/research-notes.md with a configured API key and a real device.
-
-## Production boundary
-
-This is a **single-user local application**, not a public multi-user service. Do not expose the Flask development server directly to the internet. Before public deployment, add:
-- User authentication and per-user database/session isolation.
-- Persistent rate limiting and abuse controls for session creation and tool execution.
-- HTTPS, managed secrets, API spend limits, audit logs, and monitoring.
-- Per-tool authorization and explicit confirmation for consequential actions.
-- Session lifecycle recovery, concurrency-safe persistence under the chosen production server, and automated browser/WebRTC tests.
-
-## Project layout
+## Repository layout
 
     Jarvis-AI/
-    ├── app.py
-    ├── web_server.py
+    ├── web_server.py              # Hosted Flask service and session/tool APIs
+    ├── render.yaml                # Render web-service Blueprint
+    ├── requirements.txt           # Web-only dependencies
     ├── src/
-    │   ├── ai_engine.py
-    │   ├── command_handler.py
-    │   ├── config.py
-    │   ├── database.py
-    │   ├── intent_engine.py
-    │   ├── speech_to_text.py
-    │   ├── text_to_speech.py
-    │   └── tools.py
+    │   ├── config.py              # Hosted service configuration
+    │   ├── database.py            # SQLite transcript persistence
+    │   └── tools.py               # Safe backend tool registry
     ├── web/
-    │   ├── index.html
-    │   ├── script.js
-    │   └── style.css
+    │   ├── index.html             # Website and sign-in screen
+    │   ├── script.js              # WebRTC, sign-in, transcripts and tools
+    │   └── style.css              # Responsive browser UI
     ├── tests/
+    │   ├── test_core.py
+    │   └── test_tools.py
     └── docs/
         ├── architecture.md
         └── research-notes.md
