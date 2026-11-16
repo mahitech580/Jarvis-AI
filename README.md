@@ -17,7 +17,7 @@ The browser voice model and delegated reasoning/tools backend are separate. Flas
 - Python function tools for local date/time, bounded arithmetic, allowlisted website links, user-opened search links, and recent local history.
 - Backend tool calls are executed by Flask, not by arbitrary code in the browser.
 - Tool results return to the Responses delegation; GPT-Live can explain them aloud while the session remains live.
-- Local conversation transcript persistence, short recent-history context, usage display, graceful session close, and microphone cleanup.
+- Local conversation transcript persistence, on-demand recent-history retrieval through an assistant tool, usage display, graceful session close, and microphone cleanup.
 - Responsive browser UI with connection states and visible transcripts.
 
 ### Desktop assistant
@@ -32,7 +32,7 @@ The browser voice model and delegated reasoning/tools backend are separate. Flas
 - Browser WebRTC SDP is sent to Flask; Flask creates the Live session and returns only the session ID and SDP answer.
 - Custom functions are allowlisted and validate their arguments. There is no shell, arbitrary Python, arbitrary URL, or unrestricted file-access tool.
 - Local SQLite stores text transcripts, not browser microphone recordings.
-- Set SAVE_CONVERSATION_HISTORY=false to disable new transcript persistence and history context.
+- Set SAVE_CONVERSATION_HISTORY=false to disable new transcript persistence and the recent-history tool.
 - The server binds to 127.0.0.1 by default and is intended for one local user.
 - .env, SQLite databases, audio and generated data are ignored by Git.
 
@@ -94,7 +94,7 @@ The desktop version uses the local microphone and speaker. Close other applicati
 | AI_MODEL | gpt-6-luna | Desktop Responses API model |
 | WHISPER_MODEL | base | Local desktop Whisper model |
 | DATABASE_PATH | data/jarvis.db | Local SQLite file |
-| SAVE_CONVERSATION_HISTORY | true | Save local text transcripts and recent context |
+| SAVE_CONVERSATION_HISTORY | true | Save local text transcripts and enable on-demand recent-history retrieval |
 | TTS_RATE | 165 | Desktop speech rate |
 | TTS_VOLUME | 1.0 | Desktop speech volume |
 | JARVIS_HOST | 127.0.0.1 | Flask bind address; keep local for single-user use |
