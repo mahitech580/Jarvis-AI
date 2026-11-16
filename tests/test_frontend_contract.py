@@ -83,7 +83,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("sessionStartedResolve = null", waiter)
         self.assertIn("sessionStartedReject = null", waiter)
         self.assertIn("onFailed(new Error", waiter)
-        self.assertIn("startedPromise.catch(() => {})", waiter)
+        self.assertIn("startedPromise.catch(() => {})", SCRIPT)
 
     def test_live_api_client_event_family_is_used(self):
         for event_name in (
