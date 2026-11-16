@@ -39,6 +39,16 @@ const sendMessageButton = document.getElementById("sendMessageBtn");
 const exportTranscriptButton = document.getElementById("exportTranscriptBtn");
 const toastRegion = document.getElementById("toastRegion");
 const quickCommandButtons = document.querySelectorAll("[data-prompt]");
+const settingsToggleButton = document.getElementById("settingsToggleBtn");
+const settingsPanel = document.getElementById("settingsPanel");
+const settingsCloseButton = document.getElementById("settingsCloseBtn");
+const micDeviceSelect = document.getElementById("micDeviceSelect");
+const refreshDevicesButton = document.getElementById("refreshDevicesBtn");
+const deviceHint = document.getElementById("deviceHint");
+const micPermissionStatus = document.getElementById("micPermissionStatus");
+const keyboardHelpButton = document.getElementById("keyboardHelpBtn");
+const shortcutDialog = document.getElementById("shortcutDialog");
+const shortcutDialogClose = document.getElementById("shortcutDialogClose");
 
 let peerConnection = null;
 let dataChannel = null;
@@ -60,6 +70,8 @@ let visualizerFrame = null;
 let sessionClock = null;
 let sessionStartedAt = null;
 let toastTimer = null;
+let selectedMicDeviceId = "";
+let micPermissionQuery = null;
 let micMuted = false;
 let speakerMuted = false;
 const activeTranscriptSegments = { user: null, assistant: null };
@@ -340,6 +352,198 @@ logoutButton.addEventListener("click", async () => {
     showLogin("You have signed out.");
 });
 
+
+
+function readSavedMicrophonePreference() {
+    try {
+        selectedMicDeviceId = window.localStorage.getItem("jarvis.mic.deviceId") || "";
+    } catch (error) {
+        selectedMicDeviceId = "";
+    }
+}
+
+function saveMicrophonePreference(deviceId) {
+    selectedMicDeviceId = deviceId || "";
+    try {
+        if (selectedMicDeviceId) {
+            window.localStorage.setItem("jarvis.mic.deviceId", selectedMicDeviceId);
+        } else {
+            window.localStorage.removeItem("jarvis.mic.deviceId");
+        }
+    } catch (error) {
+        console.warn("The microphone preference could not be stored in this browser.", error);
+    }
+}
+
+async function refreshAudioDevices() {
+    if (!micDeviceSelect) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        micDeviceSelect.disabled = true;
+        if (deviceHint) deviceHint.textContent = "This browser does not expose audio device selection.";
+        return;
+    }
+
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const inputs = devices.filter((device) => device.kind === "audioinput");
+        const previousSelection = selectedMicDeviceId || micDeviceSelect.value;
+        micDeviceSelect.replaceChildren();
+
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = "System default microphone";
+        micDeviceSelect.appendChild(defaultOption);
+
+        inputs.forEach((device, index) => {
+            const option = document.createElement("option");
+            option.value = device.deviceId;
+            option.textContent = device.label || ("Microphone " + (index + 1));
+            micDeviceSelect.appendChild(option);
+        });
+
+        const selectionExists = inputs.some((device) => device.deviceId === previousSelection);
+        micDeviceSelect.value = selectionExists ? previousSelection : "";
+        if (!selectionExists && previousSelection) saveMicrophonePreference("");
+
+        micDeviceSelect.disabled = inputs.length === 0;
+        if (deviceHint) {
+            deviceHint.textContent = inputs.some((device) => device.label)
+                ? "Choose the input used the next time you start a live session."
+                : "Device names are hidden until microphone access is granted. Choose the default for now.";
+        }
+    } catch (error) {
+        console.warn("Could not enumerate microphone devices.", error);
+        if (deviceHint) deviceHint.textContent = "Microphone devices could not be listed. The system default will be used.";
+    }
+}
+
+async function refreshMicrophonePermission() {
+    if (!micPermissionStatus) return;
+    if (!navigator.permissions || !navigator.permissions.query) {
+        micPermissionStatus.textContent = "BROWSER MANAGED";
+        return;
+    }
+    try {
+        micPermissionQuery = await navigator.permissions.query({ name: "microphone" });
+        const update = () => {
+            micPermissionStatus.textContent = micPermissionQuery.state.toUpperCase();
+        };
+        update();
+        micPermissionQuery.addEventListener("change", update);
+    } catch (error) {
+        micPermissionStatus.textContent = "BROWSER MANAGED";
+    }
+}
+
+function openSettingsPanel() {
+    if (!settingsPanel || !settingsToggleButton) return;
+    settingsPanel.hidden = false;
+    settingsToggleButton.setAttribute("aria-expanded", "true");
+    refreshAudioDevices();
+    refreshMicrophonePermission();
+}
+
+function closeSettingsPanel() {
+    if (!settingsPanel || !settingsToggleButton) return;
+    settingsPanel.hidden = true;
+    settingsToggleButton.setAttribute("aria-expanded", "false");
+}
+
+if (settingsToggleButton) {
+    settingsToggleButton.addEventListener("click", () => {
+        if (settingsPanel && !settingsPanel.hidden) closeSettingsPanel();
+        else openSettingsPanel();
+    });
+}
+
+if (settingsCloseButton) settingsCloseButton.addEventListener("click", closeSettingsPanel);
+
+document.addEventListener("click", (event) => {
+    if (!settingsPanel || settingsPanel.hidden) return;
+    if (settingsPanel.contains(event.target) || settingsToggleButton?.contains(event.target)) return;
+    closeSettingsPanel();
+});
+
+if (micDeviceSelect) {
+    micDeviceSelect.addEventListener("change", () => {
+        saveMicrophonePreference(micDeviceSelect.value);
+        if (deviceHint) {
+            deviceHint.textContent = selectedMicDeviceId
+                ? "Selected microphone will be used when you start the next live session."
+                : "The system default microphone will be used next time.";
+        }
+        showToast("Microphone preference saved for the next session.");
+    });
+}
+
+if (refreshDevicesButton) {
+    refreshDevicesButton.addEventListener("click", async () => {
+        await refreshAudioDevices();
+        await refreshMicrophonePermission();
+        showToast("Audio device list refreshed.");
+    });
+}
+
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener("devicechange", refreshAudioDevices);
+}
+
+function openShortcutGuide() {
+    if (!shortcutDialog) return;
+    if (typeof shortcutDialog.showModal === "function") shortcutDialog.showModal();
+    else shortcutDialog.setAttribute("open", "");
+}
+
+function closeShortcutGuide() {
+    if (!shortcutDialog) return;
+    if (typeof shortcutDialog.close === "function") shortcutDialog.close();
+    else shortcutDialog.removeAttribute("open");
+}
+
+if (keyboardHelpButton) keyboardHelpButton.addEventListener("click", openShortcutGuide);
+if (shortcutDialogClose) shortcutDialogClose.addEventListener("click", closeShortcutGuide);
+
+document.addEventListener("keydown", (event) => {
+    const target = event.target;
+    const isTyping = target instanceof HTMLElement && (
+        target.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
+    );
+    if (isTyping || event.altKey) return;
+
+    if (event.key === "?" && !event.ctrlKey && !event.metaKey) {
+        openShortcutGuide();
+        return;
+    }
+
+    if (!(event.ctrlKey || event.metaKey)) return;
+    const key = event.key.toLowerCase();
+
+    if (event.shiftKey && event.code === "Space") {
+        event.preventDefault();
+        if (connected || connecting) stopConversation();
+        else startConversation();
+        return;
+    }
+    if (key === "m" && event.shiftKey) {
+        event.preventDefault();
+        if (connected && remoteAudio) speakerControlButton.click();
+        return;
+    }
+    if (key === "m" && !event.shiftKey) {
+        event.preventDefault();
+        if (connected && microphoneStream) micControlButton.click();
+        return;
+    }
+    if (key === "e" && event.shiftKey) {
+        event.preventDefault();
+        exportVisibleTranscript();
+    }
+});
+
+readSavedMicrophonePreference();
+refreshAudioDevices();
+refreshMicrophonePermission();
 
 function showToast(message, kind = "info") {
     if (!toastRegion) return;
@@ -678,9 +882,29 @@ async function startConversation() {
         }
         if (!window.RTCPeerConnection) throw new Error("This browser does not support WebRTC.");
 
-        microphoneStream = await navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-        });
+        const audioConstraints = {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+        };
+        if (selectedMicDeviceId) audioConstraints.deviceId = { exact: selectedMicDeviceId };
+
+        try {
+            microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+        } catch (error) {
+            const deviceUnavailable = selectedMicDeviceId &&
+                ["OverconstrainedError", "NotFoundError"].includes(error.name);
+            if (!deviceUnavailable) throw error;
+            console.warn("The preferred microphone is unavailable; retrying with the system default.");
+            saveMicrophonePreference("");
+            if (micDeviceSelect) micDeviceSelect.value = "";
+            showToast("Preferred microphone unavailable. Using the system default instead.");
+            microphoneStream = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+            });
+        }
+        if (micPermissionStatus) micPermissionStatus.textContent = "GRANTED";
+        await refreshAudioDevices();
         startMicrophoneVisualizer(microphoneStream);
 
         peerConnection = new RTCPeerConnection();
@@ -1076,6 +1300,12 @@ window.addEventListener("beforeunload", () => {
     window.clearInterval(localClockTimer);
     window.removeEventListener("online", refreshBrowserStatus);
     window.removeEventListener("offline", refreshBrowserStatus);
+    if (navigator.mediaDevices && navigator.mediaDevices.removeEventListener) {
+        navigator.mediaDevices.removeEventListener("devicechange", refreshAudioDevices);
+    }
+    if (micPermissionQuery && micPermissionQuery.removeEventListener) {
+        micPermissionQuery.removeEventListener("change", () => {});
+    }
     if (peerConnection) peerConnection.close();
 });
 
