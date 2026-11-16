@@ -19,6 +19,14 @@ const conversation = document.getElementById("conversation");
 const emptyState = document.getElementById("emptyState");
 const setupNote = document.getElementById("setupNote");
 const historyLabel = document.getElementById("historyLabel");
+const stateEyebrow = document.getElementById("stateEyebrow");
+const sessionDuration = document.getElementById("sessionDuration");
+const micStateText = document.getElementById("micStateText");
+const waveform = document.getElementById("waveform");
+const micControlButton = document.getElementById("micControlBtn");
+const speakerControlButton = document.getElementById("speakerControlBtn");
+const micControlText = document.getElementById("micControlText");
+const speakerControlText = document.getElementById("speakerControlText");
 
 let peerConnection = null;
 let dataChannel = null;
@@ -34,6 +42,13 @@ let sessionClosedResolve = null;
 let sessionId = null;
 let eventCounter = 0;
 let isAuthenticated = false;
+let audioContext = null;
+let micAnalyser = null;
+let visualizerFrame = null;
+let sessionClock = null;
+let sessionStartedAt = null;
+let micMuted = false;
+let speakerMuted = false;
 const activeTranscriptSegments = { user: null, assistant: null };
 const pendingResponses = new Map();
 const handledToolCalls = new Set();
@@ -44,21 +59,143 @@ function nextEventId(prefix) {
 }
 
 function setStatus(title, detail, state = "idle") {
+    const stateLabels = {
+        idle: "READY FOR INPUT",
+        connecting: "ESTABLISHING LIVE SESSION",
+        connected: "LIVE SESSION ACTIVE",
+        listening: "LISTENING TO YOU",
+        speaking: "JARVIS IS SPEAKING",
+        thinking: "WORKING ON YOUR REQUEST",
+        error: "CONNECTION NEEDS ATTENTION"
+    };
     statusText.textContent = title;
     subStatus.textContent = detail;
     voicePanel.dataset.state = state;
-    connectionPill.dataset.state = state === "error"
-        ? "error"
-        : (connected ? "connected" : (connecting ? "connecting" : "idle"));
-    connectionText.textContent = connected
-        ? "Live session"
-        : (connecting ? "Connecting" : (state === "error" ? "Connection error" : "Not connected"));
+    stateEyebrow.textContent = stateLabels[state] || "LIVE VOICE SYSTEM";
+
+    const pillState = state === "error" ? "error"
+        : (state === "connecting" ? "connecting"
+            : (connected || ["listening", "speaking", "thinking"].includes(state) ? "connected" : "idle"));
+    connectionPill.dataset.state = pillState;
+    connectionText.textContent = state === "error" ? "Connection issue"
+        : (state === "connecting" ? "Connecting"
+            : (connected ? (state === "thinking" ? "Working" : "Live") : "Standby"));
+
+    micStateText.textContent = state === "error" ? "MIC OFFLINE"
+        : (state === "idle" ? "MIC STANDBY"
+            : (micMuted ? "MIC MUTED"
+                : (state === "listening" ? "VOICE DETECTED" : "MIC ACTIVE")));
+    if (waveform) waveform.dataset.active = String(Boolean(connected && !micMuted));
 }
 
 function updateControls() {
     listenButton.disabled = connecting || (connected && sessionFinalized);
-    buttonText.textContent = connected ? "End conversation" : (connecting ? "Connecting..." : "Start conversation");
+    buttonText.textContent = connected ? "End live conversation" : (connecting ? "Connecting..." : "Start live conversation");
     listenButton.setAttribute("aria-label", connected ? "End live conversation" : "Start live conversation");
+
+    micControlButton.disabled = !connected;
+    speakerControlButton.disabled = !connected || !remoteAudio;
+    micControlButton.setAttribute("aria-pressed", String(micMuted));
+    speakerControlButton.setAttribute("aria-pressed", String(speakerMuted));
+    micControlText.textContent = micMuted ? "Unmute mic" : "Mute mic";
+    speakerControlText.textContent = speakerMuted ? "Unmute speaker" : "Mute speaker";
+}
+
+function buildWaveform() {
+    if (!waveform || waveform.childElementCount) return;
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < 36; index += 1) {
+        const bar = document.createElement("span");
+        bar.className = "wave-bar";
+        fragment.appendChild(bar);
+    }
+    waveform.appendChild(fragment);
+}
+
+function startMicrophoneVisualizer(stream) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass || !waveform) return;
+
+    stopMicrophoneVisualizer();
+    try {
+        audioContext = new AudioContextClass();
+        micAnalyser = audioContext.createAnalyser();
+        micAnalyser.fftSize = 256;
+        micAnalyser.smoothingTimeConstant = 0.72;
+        audioContext.createMediaStreamSource(stream).connect(micAnalyser);
+        audioContext.resume().catch((error) => console.warn("Microphone visualizer could not resume.", error));
+
+        const samples = new Uint8Array(micAnalyser.fftSize);
+        const bars = Array.from(waveform.children);
+        const draw = () => {
+            if (!micAnalyser) return;
+            micAnalyser.getByteTimeDomainData(samples);
+            let sum = 0;
+            for (let index = 0; index < samples.length; index += 1) {
+                const centered = (samples[index] - 128) / 128;
+                sum += centered * centered;
+            }
+            const level = Math.sqrt(sum / samples.length);
+            const amplitude = micMuted ? 0 : Math.min(1, level * 7.5);
+
+            bars.forEach((bar, index) => {
+                const taper = 0.35 + (1 - Math.abs((index - (bars.length - 1) / 2) / (bars.length / 2))) * 0.65;
+                const ripple = 0.25 + Math.abs(Math.sin(index * 0.72 + level * 35)) * 0.75;
+                const height = micMuted ? 3 : 3 + amplitude * taper * ripple * 32;
+                bar.style.height = height.toFixed(1) + "px";
+                bar.style.opacity = micMuted ? "0.18" : String(0.28 + amplitude * 0.68);
+            });
+            waveform.dataset.active = String(Boolean(connected && !micMuted));
+            visualizerFrame = window.requestAnimationFrame(draw);
+        };
+        draw();
+    } catch (error) {
+        console.warn("Microphone visualizer is unavailable.", error);
+        stopMicrophoneVisualizer();
+    }
+}
+
+function stopMicrophoneVisualizer() {
+    if (visualizerFrame !== null) {
+        window.cancelAnimationFrame(visualizerFrame);
+        visualizerFrame = null;
+    }
+    micAnalyser = null;
+    if (audioContext) {
+        const context = audioContext;
+        audioContext = null;
+        context.close().catch((error) => console.warn("Could not close audio visualizer.", error));
+    }
+    if (waveform) waveform.dataset.active = "false";
+    if (micStateText) micStateText.textContent = "MIC STANDBY";
+}
+
+function formatSessionDuration(milliseconds) {
+    const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+    const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+    const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+    return minutes + ":" + seconds;
+}
+
+function startSessionClock() {
+    if (sessionClock) return;
+    sessionStartedAt = Date.now();
+    const update = () => {
+        if (sessionStartedAt !== null) {
+            sessionDuration.textContent = formatSessionDuration(Date.now() - sessionStartedAt);
+        }
+    };
+    update();
+    sessionClock = window.setInterval(update, 1000);
+}
+
+function stopSessionClock() {
+    if (sessionClock) {
+        window.clearInterval(sessionClock);
+        sessionClock = null;
+    }
+    sessionStartedAt = null;
+    sessionDuration.textContent = "00:00";
 }
 
 function showLogin(message = "") {
@@ -245,9 +382,9 @@ function appendTranscript(role, delta, startMs, endMs) {
     conversation.scrollTop = conversation.scrollHeight;
 
     if (role === "user") {
-        setStatus("Listening...", "You can speak naturally, including while JARVIS is responding.", "connected");
+        setStatus("Listening...", "Your voice is being streamed to the live session. You can interrupt JARVIS at any time.", "listening");
     } else {
-        setStatus("JARVIS is speaking...", "You can interrupt at any time.", "speaking");
+        setStatus("JARVIS is speaking...", "You can interrupt naturally; JARVIS will stop and listen.", "speaking");
     }
 }
 
@@ -359,6 +496,7 @@ async function startConversation() {
         microphoneStream = await navigator.mediaDevices.getUserMedia({
             audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
         });
+        startMicrophoneVisualizer(microphoneStream);
 
         peerConnection = new RTCPeerConnection();
         remoteAudio = document.createElement("audio");
@@ -374,6 +512,7 @@ async function startConversation() {
         peerConnection.addEventListener("track", (event) => {
             const stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
             remoteAudio.srcObject = stream;
+            updateControls();
             remoteAudio.play().catch((error) => {
                 console.warn("Browser audio playback needs user interaction.", error);
                 setStatus("Audio playback blocked", "Check browser audio permissions and try again.", "error");
@@ -520,7 +659,7 @@ async function finishDelegatedResponse(key) {
         const outputs = await Promise.all(batch.calls.map(runDelegatedTool));
         outputs.filter(Boolean).forEach((output) => sendEvent(output));
         sendEvent({ type: "response.create", event_id: nextEventId("continue") });
-        setStatus("JARVIS is listening.", "You can continue speaking while I finish the task.", "connected");
+        setStatus("JARVIS is listening.", "You can continue speaking while I finish the task.", "listening");
     } catch (error) {
         console.error("Could not return delegated tool results:", error);
         setStatus("Tool response error", "I could not return a result to the backend agent.", "error");
@@ -567,8 +706,9 @@ function handleLiveEvent(message) {
             sessionId = event.session && event.session.id ? event.session.id : sessionId;
             connected = true;
             connecting = false;
+            startSessionClock();
             updateControls();
-            setStatus("JARVIS is online.", "The live voice session is ready.", "connected");
+            setStatus("JARVIS is online.", "The live voice session is ready. Speak naturally and interrupt whenever you need.", "connected");
             if (sessionStartedResolve) sessionStartedResolve();
             break;
 
@@ -597,7 +737,7 @@ function handleLiveEvent(message) {
             break;
 
         case "session.delegation.created":
-            setStatus("JARVIS is working...", "I am handling a backend task while keeping our conversation open.", "connected");
+            setStatus("JARVIS is working...", "I am handling a backend task while keeping our conversation open.", "thinking");
             break;
 
         case "response.event":
@@ -646,6 +786,10 @@ function cleanupSession() {
 
     connected = false;
     connecting = false;
+    stopSessionClock();
+    stopMicrophoneVisualizer();
+    micMuted = false;
+    speakerMuted = false;
     pendingResponses.clear();
     handledToolCalls.clear();
 
@@ -702,6 +846,26 @@ listenButton.addEventListener("click", () => {
     else startConversation();
 });
 
+micControlButton.addEventListener("click", () => {
+    if (!connected || !microphoneStream) return;
+    micMuted = !micMuted;
+    microphoneStream.getAudioTracks().forEach((track) => {
+        track.enabled = !micMuted;
+    });
+    micControlButton.setAttribute("aria-pressed", String(micMuted));
+    micControlText.textContent = micMuted ? "Unmute mic" : "Mute mic";
+    micStateText.textContent = micMuted ? "MIC MUTED" : "MIC ACTIVE";
+    if (waveform) waveform.dataset.active = String(!micMuted);
+});
+
+speakerControlButton.addEventListener("click", () => {
+    if (!connected || !remoteAudio) return;
+    speakerMuted = !speakerMuted;
+    remoteAudio.muted = speakerMuted;
+    speakerControlButton.setAttribute("aria-pressed", String(speakerMuted));
+    speakerControlText.textContent = speakerMuted ? "Unmute speaker" : "Mute speaker";
+});
+
 clearButton.addEventListener("click", () => {
     conversation.replaceChildren();
     if (emptyState) conversation.appendChild(emptyState);
@@ -720,8 +884,11 @@ window.addEventListener("beforeunload", () => {
         // Always release local media when the user leaves the page.
     }
     if (microphoneStream) microphoneStream.getTracks().forEach((track) => track.stop());
+    stopMicrophoneVisualizer();
+    stopSessionClock();
     if (peerConnection) peerConnection.close();
 });
 
+buildWaveform();
 updateControls();
 checkAuthentication();
