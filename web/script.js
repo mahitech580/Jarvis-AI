@@ -635,6 +635,11 @@ function cleanupSession() {
         window.clearTimeout(closeTimer);
         closeTimer = null;
     }
+    if (sessionClosedResolve) {
+        const resolveClosed = sessionClosedResolve;
+        sessionClosedResolve = null;
+        resolveClosed();
+    }
 
     flushTranscript("user");
     flushTranscript("assistant");
