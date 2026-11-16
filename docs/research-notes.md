@@ -2,59 +2,65 @@
 
 **Research date:** 16 November 2026
 
-This note records the current reference patterns reviewed for the JARVIS upgrade. It focuses on practical architecture choices, not benchmark claims.
+This note captures the official platform guidance and open-source project patterns used to improve JARVIS. The objective is a natural, interruptible voice assistant that can keep listening while speaking and continue the conversation while backend work runs.
 
 ## Executive recommendation
 
-For this repository's immediate goal, the best fit is a browser-first OpenAI Realtime session over WebRTC, with Flask retaining the trusted tool-execution and storage boundary.
+For the current goal, JARVIS uses **GPT-Live + WebRTC + Responses delegation** in the browser.
 
-Why:
-- The existing web app is already a small Flask + vanilla JavaScript application.
-- The desired browser experience is natural speech-to-speech with low interaction overhead and the ability to interrupt the assistant.
-- The Realtime API handles audio input/output and turn behavior in one stateful session, while the app can still expose server-controlled tools.
-- WebRTC is the recommended browser transport; the API's server-to-server WebSocket path would require the app to manage audio chunks, encoding, buffering, playback, and truncation itself.
+OpenAI's current GPT-Live guide describes this exact interaction pattern: a voice model carries the spoken conversation, listens while speaking (full duplex), and delegates research or tool work to a separately configured backend. WebRTC is recommended for browser audio; media tracks carry audio and a data channel carries transcripts, session events, and delegated work.
 
-This avoids introducing a large framework before the product requires it. The Python desktop app remains a separate chained pipeline for now.
+The architecture separates:
+- **Conversation:** GPT-Live, configured with a short speaking style and delegation prompt.
+- **Reasoning and tools:** a Responses model configured with hosted web search and JARVIS function tools.
+- **Permissions and execution:** the Python application validates and runs every custom function.
+- **State:** local SQLite text transcripts and recent history.
 
-## Approaches compared
+This is a closer fit than simply making the old request/response voice pipeline faster. It also avoids introducing a large third-party agent framework before the project needs telephony, multi-provider orchestration, or distributed workers.
 
-| Approach | Strengths | Tradeoffs | When it fits |
+## Current OpenAI voice choices
+
+| Option | Conversation behavior | Backend/tool model | Good fit |
 |---|---|---|---|
-| OpenAI Realtime API + WebRTC | Direct speech-to-speech session, provider-managed audio transport, VAD/turn handling, interruptions, tool calls | OpenAI model/provider coupling; usage is billed; app still owns tool safety and persistence | Best immediate fit for the existing browser app |
-| LiveKit Agents | Python-first agent framework; pluggable STT/LLM/TTS and realtime models; session lifecycle, turn detection, interruptions, tools, telephony and deployment paths | More infrastructure and concepts than this small repo currently needs | Strong next step for multi-provider routing, rooms, SIP/phone, distributed workers, or production deployment |
-| Pipecat | Open-source Python voice pipeline; composable processors; multiple STT/LLM/TTS providers; WebRTC transports and RTVI client integrations | You manage a pipeline and its components; introduces transport/server and dependency complexity | Best when you need explicit control of every audio stage or want provider-neutral pipelines |
-| Chained Whisper → LLM → TTS | Transparent stages; local components possible; easy to inspect intermediate transcripts; works offline for some stages | Sequential latency; endpointing and interruption behavior are application responsibilities; fixed-duration recording is not continuous voice | Good for offline desktop operation and workflows that need transcript control |
+| GPT-Live | Full-duplex conversation; can listen while speaking and keep talking while backend work runs | Separate Responses delegation or an application-managed client backend | Best for conversational assistants that need overlapping turns and delegated tasks |
+| Realtime API | Speech-to-speech session with built-in audio turn handling and interruption support | Tools can be selected in the voice session, then executed by the app | Good for a compact single-session speech agent where one model owns conversation and tool selection |
+| Chained STT → LLM → TTS | Sequential speech recognition, text reasoning, and speech generation | Fully application-managed model/tools | Good for local/offline pipelines, explicit transcript processing, and debugging individual stages |
 
-## Key patterns taken from the reference projects
+Official OpenAI references:
+- GPT-Live overview: https://developers.openai.com/api/docs/guides/live
+- GPT-Live WebRTC connection: https://developers.openai.com/api/docs/guides/voice-webrtc?api=live
+- GPT-Live delegation and tools: https://developers.openai.com/api/docs/guides/live-delegation
+- GPT-Live session and transcript lifecycle: https://developers.openai.com/api/docs/guides/live-conversations
+- GPT-Live migration from Realtime: https://developers.openai.com/api/docs/guides/live-migration
+- Voice-agent architecture comparison: https://developers.openai.com/api/docs/guides/voice-agents
 
-### OpenAI Realtime
+## Why GPT-Live is the browser choice
 
-The official Realtime guide describes a browser flow where the backend creates a short-lived client secret, the frontend establishes a WebRTC session, and the session handles audio turns, tools, and interruptions. The Realtime conversation guide documents tool-call lifecycle events and returning results through a function_call_output conversation item.
+The prior JARVIS browser flow used the browser SpeechRecognition API, waited for a completed transcript, sent one HTTP request to Flask, then played the result through browser speech synthesis. The desktop flow captured a fixed six-second audio segment, transcribed it with Whisper, ran a command or text model, then spoke the result. These are valid chained pipelines, but they are not continuous full-duplex conversations.
 
-JARVIS follows that pattern:
-- Flask mints the short-lived credential.
-- The permanent API key remains on the server.
-- Browser audio travels over WebRTC.
-- A data channel carries lifecycle events and tool calls.
-- Tool execution remains on the Python backend.
+GPT-Live changes the interaction model:
+1. The browser captures microphone audio and establishes WebRTC.
+2. Flask receives the SDP offer and creates a Live session using the long-lived API key on the trusted server.
+3. GPT-Live manages the spoken exchange and can listen while it is speaking.
+4. For task-oriented work, GPT-Live delegates to the separately configured Responses backend.
+5. The Responses backend can use hosted web search and ask the application to run registered custom functions.
+6. The application verifies each function call and returns results through the Live/Responses event protocol.
+7. The voice conversation and backend task can progress independently.
 
-Official references:
-- https://developers.openai.com/api/docs/guides/realtime
-- https://developers.openai.com/api/docs/guides/voice-webrtc
-- https://developers.openai.com/api/docs/guides/realtime-conversations
-- https://developers.openai.com/api/docs/guides/voice-agents
-- https://developers.openai.com/api/docs/guides/voice-latency-cost
+This architecture enables the assistant to keep talking while a longer task is running and to incorporate the result later. The browser never receives the project API key.
+
+## Open-source frameworks reviewed
 
 ### LiveKit Agents
 
-The LiveKit Agents examples show a Python AgentSession pattern with STT, LLM, TTS, and turn detection. Its turn documentation distinguishes VAD-only endpointing from semantic turn detection and explains interruption cancellation and truncating conversation context to speech the user actually heard.
+LiveKit Agents is a Python-first framework with agent sessions, pluggable model providers, turn detection, tools, telephony, deployment options, and session observability. Its turn documentation distinguishes voice activity detection from semantic turn completion and discusses interruption handling.
 
-Useful patterns for a future JARVIS phase:
-- Explicit session lifecycle and agent state.
-- Turn detection separate from raw speech detection.
-- Barge-in cancellation that stops in-flight generation and audio.
-- Session/tool metrics and tracing.
-- Provider swaps without rewriting the product layer.
+Patterns worth borrowing as JARVIS grows:
+- Separate session lifecycle from application/business logic.
+- Measure end-of-turn and interruption behavior instead of assuming VAD alone is enough.
+- Track tool duration and task completion separately from audio playback.
+- Add per-session metrics and traces.
+- Consider LiveKit if JARVIS needs phone/SIP, rooms, multi-user sessions, provider switching, or distributed workers.
 
 References:
 - https://docs.livekit.io/agents/
@@ -63,14 +69,13 @@ References:
 
 ### Pipecat
 
-Pipecat uses a pipeline of transport input, VAD/STT, user context, LLM, TTS, transport output, and assistant context. Its documentation describes WebRTC as a good fit for browser/mobile clients and interruption frames that cancel in-flight generation and clear queued speech. Its examples repository includes WebRTC, instant-voice, and provider integration examples.
+Pipecat is an open-source Python voice-AI pipeline framework with pluggable processors and transports. It is a strong choice when developers want explicit control over audio input, VAD/STT, LLM context, TTS, transport, and interruption frames.
 
-Useful patterns for a future JARVIS phase:
-- A processor/frame pipeline makes each audio stage inspectable.
-- VAD and semantic turn strategies should not be confused.
-- Interruption handling must cancel model/TTS work and clear unplayed speech.
-- RTVI provides a structured client/server event protocol.
-- Keep transport code separate from business logic.
+Patterns worth borrowing:
+- Keep transport adapters separate from the assistant's tools and business logic.
+- Treat interruptions as cancellation of in-flight generation and queued audio, not only a UI state change.
+- Use a structured client/server event protocol.
+- Evaluate VAD and semantic turn detection on real user audio.
 
 References:
 - https://docs.pipecat.ai/overview/introduction
@@ -80,67 +85,66 @@ References:
 - https://github.com/pipecat-ai/pipecat
 - https://github.com/pipecat-ai/pipecat-examples
 
-## Important product lessons
+## Implementation choices in this repository
 
-1. **Real-time is a transport and turn-taking property, not just a faster transcript request.** The old browser code waited for a completed Web Speech API result, sent one Flask request, then used browser speech synthesis. The old desktop path captured a fixed six-second clip. Neither path is a full-duplex streaming experience.
-2. **Barge-in is essential.** Users must be able to speak while the assistant is responding. Realtime WebRTC provides provider-managed audio buffering and interruption handling; a future WebSocket pipeline must implement cancellation and audio truncation carefully.
-3. **Keep tools on the trusted server.** The model proposes a function call; the backend validates the function name and arguments. JARVIS exposes only date/time, bounded arithmetic, a fixed website allowlist, search links, and local history. It does not expose shell, arbitrary Python, arbitrary URLs, or unrestricted local-file access.
-4. **Keep secrets out of the browser.** The browser receives only a short-lived client credential. The standard API key is read by Flask from .env.
-5. **Treat transcripts as imperfect hints.** Input transcription is asynchronous and can differ from what the audio model understood. It is used for captions and local history, not as the source of truth for every spoken instruction.
-6. **Memory needs boundaries.** JARVIS stores recent text locally and supplies a short recent-history window on the next session. This is not yet semantic/vector memory. Users can disable it.
-7. **Measure real users' audio.** Accents, code-switching, background noise, names, numbers, pauses, interruption frequency, and device changes matter more than a demo with clean synthesized audio.
+Implemented:
+- GPT-Live WebRTC session creation through Flask's server-side POST to /v1/live/sessions.
+- The project API key remains on the backend; the browser receives only the SDP answer and session ID.
+- A voice prompt for JARVIS and a separate Responses backend prompt.
+- Responses delegation with hosted web search and registered custom tools.
+- A Python allowlist with bounded arithmetic, safe URLs, current local date/time, and recent transcript history.
+- The browser handles nested response.event envelopes, collects completed function calls, sends response.item.create results, and resumes backend work with response.create.
+- Input and output transcript fragments are displayed independently because both speakers can overlap.
+- SQLite transcript storage and a short recent-history window for the delegated backend.
+- Graceful session.close handling with session.closed finalization and local microphone cleanup.
+- Desktop Responses API support and an offline FAQ fallback.
+- Thread-safe SQLite access, safer desktop intent routing, request-size limits, same-origin checks, and basic security headers.
 
-## Current implementation scope
+Not implemented or not yet verified:
+- Real microphone testing against an API project with GPT-Live access.
+- End-to-end evaluation of overlapping speech, interruption recovery, and latency.
+- Automated browser/WebRTC integration tests.
+- Wake-word detection for an always-on desktop.
+- A user-controlled multilingual preference and systematic Telugu/Hindi/English evaluation.
+- Semantic long-term/vector memory.
+- OS-level application/file control, email sending, or other consequential tools.
+- Multi-user authentication and public deployment hardening.
 
-Implemented in this upgrade:
-- Browser WebRTC speech-to-speech session using the GA Realtime client-secret flow.
-- Server-only key handling and no-store client-secret response.
-- Realtime tools routed through an allowlisted Flask endpoint.
-- Live transcript UI and local message storage.
-- Recent conversation context injected at new-session creation.
-- Optional input transcription setting.
-- Desktop Responses API integration with offline FAQ fallback.
-- Thread-safe SQLite storage and safer intent matching.
-- Request size limits, same-origin POST checks, and basic security headers.
+## Cost and privacy
 
-Not claimed as completed:
-- A production multi-user auth system.
-- A persistent distributed worker/session service.
-- A local wake-word engine.
-- Full multilingual evaluation and user language preferences.
-- A vector database or long-term semantic memory.
-- Browser automation, email sending, OS-level desktop control, or file modification tools.
-- Automated end-to-end WebRTC evaluation on real microphones.
-- Measured latency or quality results.
+GPT-Live voice duration and the delegated Responses model/tools are billed separately. Session creation and usage accounting are documented in the Live guides; check current API pricing and project spend limits before testing. ChatGPT subscriptions do not include API credits.
 
-## Validation plan
+The browser client does not persist microphone recordings. It stores transcript text locally in SQLite when SAVE_CONVERSATION_HISTORY=true. Users can disable new local transcript storage and history injection through the environment setting.
 
-Run the unit suite:
+## Validation checklist
+
+Run unit tests:
 
     python -m unittest discover -s tests -v
 
-Then perform these manual scenarios in Chrome/Edge:
-1. Start without OPENAI_API_KEY: UI should explain configuration is missing and never expose a project key.
-2. Start with a valid key and microphone permission: session connects and audio is audible.
-3. Speak a normal open-ended question: JARVIS responds in speech and the transcript appears.
-4. Interrupt JARVIS mid-response: output should stop/yield and the new user turn should be handled.
-5. Ask for a calculation: calculate is called and only arithmetic is evaluated.
-6. Ask for a web search: a clickable HTTPS link appears; the server does not execute arbitrary browsing.
-7. Ask to open a disallowed URL or run shell code: the tool registry rejects it.
-8. Reload the page: saved local transcript text is restored when history is enabled.
-9. Disable SAVE_CONVERSATION_HISTORY: new transcript messages are not stored.
-10. Disable the input transcription model: live speech remains possible; user-side transcript persistence is absent.
-11. Deny microphone permission, disconnect the network, or close the data channel: the UI reports a recoverable error and releases the microphone.
-12. Test several accents, room noise, names, numbers, and longer pauses; note transcription and turn-taking failures separately.
+Then, with a configured API key, Chrome or Edge, microphone, and speakers/headphones:
 
-## Production hardening before public deployment
+1. Start the server with no API key. The page should explain that GPT-Live is not configured.
+2. Add a valid API key with GPT-Live and backend-model access. Restart and check the model status.
+3. Start a browser session and verify that session.started arrives and audio works.
+4. Speak a normal question and verify the input and assistant transcript bubbles update.
+5. Interrupt the assistant while it speaks. Verify that the user can speak concurrently and the assistant adapts rather than finishing an obsolete monologue.
+6. Ask for current information. Verify the hosted web_search backend is used and its answer is spoken.
+7. Ask for a calculation. Verify the delegated calculator tool executes and the result is returned to the backend.
+8. Ask to open GitHub. Verify that JARVIS returns a user-clickable allowlisted link.
+9. Request an arbitrary URL, shell command, or Python expression. Verify that no unrestricted execution path exists.
+10. Reload the page and verify saved text history is restored.
+11. Set SAVE_CONVERSATION_HISTORY=false and verify that new messages are not saved or injected into future sessions.
+12. Deny microphone permission, drop the network, and close the session. Verify error feedback, microphone release, and session finalization reporting.
+13. Repeat with different accents, names, numbers, room noise, long pauses, and overlapping speech.
 
-- Authentication and per-user data separation.
-- Per-user tool authorization and audit log.
-- Persistent rate limiting for token creation and tool endpoints.
-- HTTPS and managed secrets.
-- A policy/confirmation layer for high-impact actions.
-- Observability for session creation, first audio, tool start/end, interruptions, disconnects, and API errors.
-- A repeatable evaluation set and p50/p95 latency reporting.
-- Session cleanup and database lifecycle under the chosen WSGI/ASGI server.
-- Provider quota, billing, and abuse monitoring.
+Record p50/p95 time to first response audio, tool duration, interruption recovery time, task success, transcription quality, and cost on the same test set. Do not claim latency or quality improvements until measured.
+
+## Before public deployment
+
+- Authenticate every user and isolate their session, transcripts, and tools.
+- Rate-limit session creation and tool execution with persistent controls.
+- Use HTTPS and managed secrets; configure API spend limits.
+- Add tool-level authorization, explicit confirmations for actions with side effects, and audit logging.
+- Add session tracing, tool progress reporting, crash recovery, and automated browser/WebRTC tests.
+- Review data retention and transcript consent with users.
