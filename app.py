@@ -33,6 +33,14 @@ class Jarvis:
         print("\n" + "=" * 60)
         return "I displayed your recent conversation history."
 
+    def _save_turn(self, user_text, intent, response):
+        if not SAVE_CONVERSATION_HISTORY:
+            return
+        self.database.save_conversation(user_text, intent, response)
+        # Keep the shared browser/desktop recent-history memory in sync.
+        self.database.save_message("user", user_text)
+        self.database.save_message("assistant", response)
+
     def run(self):
         print("=" * 60)
         print("                 JARVIS AI")
@@ -53,8 +61,7 @@ class Jarvis:
 
                     if intent == "EXIT":
                         response = "Goodbye. Jarvis is shutting down."
-                        if SAVE_CONVERSATION_HISTORY:
-                            self.database.save_conversation(user_text, intent, response)
+                        self._save_turn(user_text, intent, response)
                         self.tts.speak(response)
                         break
 
@@ -68,8 +75,7 @@ class Jarvis:
                                 history=self.database.get_history(8),
                             )
 
-                    if SAVE_CONVERSATION_HISTORY:
-                        self.database.save_conversation(user_text, intent, response)
+                    self._save_turn(user_text, intent, response)
                     self.tts.speak(response)
 
                 except KeyboardInterrupt:
