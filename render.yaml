@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: jarvis-ai-web
+    runtime: python
+    plan: free
+    region: singapore
+    branch: main
+    autoDeploy: true
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn web_server:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 120
+    healthCheckPath: /healthz
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: JARVIS_ACCESS_PASSWORD
+        sync: false
+      - key: JARVIS_SESSION_SECRET
+        generateValue: true
+      - key: LIVE_MODEL
+        value: gpt-live-1
+      - key: LIVE_BACKEND_MODEL
+        value: gpt-6-luna
+      - key: DATABASE_PATH
+        value: /tmp/jarvis.db
+      - key: SAVE_CONVERSATION_HISTORY
+        value: "true"
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
