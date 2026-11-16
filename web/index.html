@@ -3,84 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JARVIS AI</title>
+    <meta name="theme-color" content="#080b12">
+    <meta name="description" content="JARVIS real-time AI voice assistant">
+    <title>JARVIS AI — Live Voice Assistant</title>
     <link rel="stylesheet" href="/style.css">
 </head>
-
 <body>
-
-<div class="app">
-
-    <header class="topbar">
-        <div class="brand">
-            <div class="brand-icon">J</div>
-            <div>
-                <h1>JARVIS</h1>
-                <span>AI Voice Assistant</span>
+    <div class="app-shell">
+        <header class="topbar">
+            <a class="brand" href="/" aria-label="JARVIS home">
+                <span class="brand-mark">J</span>
+                <span class="brand-copy">
+                    <strong>JARVIS</strong>
+                    <small>PERSONAL AI ASSISTANT</small>
+                </span>
+            </a>
+            <div class="connection-pill" id="connectionPill" data-state="idle">
+                <span class="connection-dot"></span>
+                <span id="connectionText">Not connected</span>
             </div>
-        </div>
+        </header>
 
-        <div class="online">
-            <span></span>
-            Online
-        </div>
-    </header>
-
-
-    <main>
-
-        <section class="voice-area">
-
-            <div class="orb" id="orb">
-                <div class="orb-inner">
-                    J
+        <main class="main-content">
+            <section class="voice-panel" aria-labelledby="statusText">
+                <div class="orb-wrap" id="orb">
+                    <div class="orb-ring ring-one"></div>
+                    <div class="orb-ring ring-two"></div>
+                    <div class="orb-core"><span>J</span></div>
                 </div>
-            </div>
 
-            <h2 id="statusText">
-                How can I help?
-            </h2>
+                <div class="status-copy">
+                    <p class="eyebrow">REAL-TIME VOICE SESSION</p>
+                    <h1 id="statusText">Ready when you are.</h1>
+                    <p id="subStatus">Connect to start a natural, hands-free conversation.</p>
+                </div>
 
-            <p id="subStatus">
-                Tap the microphone and start speaking
-            </p>
+                <div class="controls">
+                    <button class="mic-button" id="listenBtn" type="button">
+                        <span class="mic-icon" aria-hidden="true">●</span>
+                        <span id="buttonText">Start conversation</span>
+                    </button>
+                    <button class="secondary-button" id="clearBtn" type="button">Clear chat</button>
+                </div>
 
-        </section>
+                <p class="microphone-note">
+                    Microphone permission is required. Speak naturally — JARVIS can be interrupted while speaking.
+                </p>
+                <p class="setup-note" id="setupNote">
+                    Live voice uses the Realtime API. Add your API key to .env and restart the server.
+                </p>
+            </section>
 
+            <section class="conversation-panel" aria-label="Conversation">
+                <div class="conversation-heading">
+                    <div>
+                        <p class="eyebrow">SESSION TRANSCRIPT</p>
+                        <h2>Conversation</h2>
+                    </div>
+                    <span class="history-label" id="historyLabel">Local history</span>
+                </div>
+                <div class="conversation-log" id="conversation" role="log" aria-live="polite" aria-relevant="additions text">
+                    <div class="empty-state" id="emptyState">
+                        <span class="empty-mark">✦</span>
+                        <p>Your conversation will appear here.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
 
-        <section class="conversation" id="conversation">
+        <footer class="footer">
+            <span>JARVIS AI</span>
+            <span>WebRTC · Speech-to-speech · Python · SQLite</span>
+            <span>Local-first application</span>
+        </footer>
+    </div>
 
-            <div class="message user-message hidden" id="userBox">
-                <div class="label">You</div>
-                <div id="userMessage"></div>
-            </div>
-
-            <div class="message jarvis-message hidden" id="jarvisBox">
-                <div class="label">JARVIS</div>
-                <div id="jarvisMessage"></div>
-            </div>
-
-        </section>
-
-
-        <button class="mic-button" id="listenBtn">
-            <span>??</span>
-        </button>
-
-        <p class="mic-label">
-            Tap to speak
-        </p>
-
-    </main>
-
-
-    <footer>
-        JARVIS AI � Python � Whisper � SQLite
-    </footer>
-
-</div>
-
-<script src="/script.js"></script>
-
+    <script src="/script.js" defer></script>
 </body>
 </html>
