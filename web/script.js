@@ -1,7 +1,6 @@
 const listenButton = document.getElementById("listenBtn");
 const buttonText = document.getElementById("buttonText");
 const clearButton = document.getElementById("clearBtn");
-const orb = document.getElementById("orb");
 const voicePanel = document.querySelector(".voice-panel");
 const statusText = document.getElementById("statusText");
 const subStatus = document.getElementById("subStatus");
@@ -18,21 +17,35 @@ let microphoneStream = null;
 let remoteAudio = null;
 let connecting = false;
 let connected = false;
-let userTranscriptByItem = new Map();
-let assistantTranscriptByItem = new Map();
-let handledToolCalls = new Set();
-let liveAssistantBubble = null;
+let sessionFinalized = false;
+let closeTimer = null;
+let sessionStartedResolve = null;
+let sessionStartedReject = null;
+let sessionId = null;
+let eventCounter = 0;
+let activeTranscriptSegments = { user: null, assistant: null };
+const pendingResponses = new Map();
+const handledToolCalls = new Set();
+
+function nextEventId(prefix) {
+    eventCounter += 1;
+    return prefix + "_" + Date.now() + "_" + eventCounter;
+}
 
 function setStatus(title, detail, state = "idle") {
     statusText.textContent = title;
     subStatus.textContent = detail;
     voicePanel.dataset.state = state;
-    connectionPill.dataset.state = state === "error" ? "error" : (connected ? "connected" : (connecting ? "connecting" : "idle"));
-    connectionText.textContent = connected ? "Live session" : (connecting ? "Connecting" : (state === "error" ? "Connection error" : "Not connected"));
+    connectionPill.dataset.state = state === "error"
+        ? "error"
+        : (connected ? "connected" : (connecting ? "connecting" : "idle"));
+    connectionText.textContent = connected
+        ? "GPT-Live session"
+        : (connecting ? "Connecting" : (state === "error" ? "Connection error" : "Not connected"));
 }
 
 function updateControls() {
-    listenButton.disabled = connecting;
+    listenButton.disabled = connecting || (connected && sessionFinalized);
     buttonText.textContent = connected ? "End conversation" : (connecting ? "Connecting..." : "Start conversation");
     listenButton.setAttribute("aria-label", connected ? "End live conversation" : "Start live conversation");
 }
@@ -68,6 +81,7 @@ function addActionLink(label, url) {
         const parsed = new URL(url);
         if (parsed.protocol !== "https:") return;
         ensureConversationVisible();
+
         const bubble = document.createElement("article");
         bubble.className = "message message-assistant";
         const link = document.createElement("a");
@@ -94,7 +108,61 @@ async function persistMessage(role, content) {
             cache: "no-store"
         });
     } catch (error) {
-        console.warn("Conversation message was not saved locally.", error);
+        console.warn("Conversation text was not saved locally.", error);
+    }
+}
+
+function flushTranscript(role) {
+    const segment = activeTranscriptSegments[role];
+    if (!segment) return;
+
+    if (segment.timer) window.clearTimeout(segment.timer);
+    activeTranscriptSegments[role] = null;
+    persistMessage(role, segment.text);
+}
+
+function appendTranscript(role, delta, startMs, endMs) {
+    if (!delta) return;
+
+    const start = Number.isFinite(startMs) ? startMs : null;
+    const end = Number.isFinite(endMs) ? endMs : start;
+    let segment = activeTranscriptSegments[role];
+
+    if (
+        segment &&
+        start !== null &&
+        segment.lastEnd !== null &&
+        start - segment.lastEnd > 2200
+    ) {
+        flushTranscript(role);
+        segment = null;
+    }
+
+    if (!segment) {
+        const message = addMessage(role, "");
+        segment = {
+            text: "",
+            bubble: message.bubble,
+            body: message.body,
+            lastEnd: null,
+            timer: null
+        };
+        activeTranscriptSegments[role] = segment;
+    }
+
+    // Append fragments as delivered. Do not trim: leading spaces are meaningful.
+    segment.text += delta;
+    segment.body.textContent = segment.text;
+    if (end !== null) segment.lastEnd = end;
+
+    if (segment.timer) window.clearTimeout(segment.timer);
+    segment.timer = window.setTimeout(() => flushTranscript(role), 1800);
+    conversation.scrollTop = conversation.scrollHeight;
+
+    if (role === "user") {
+        setStatus("Listening...", "JARVIS can hear you while it is speaking.", "connected");
+    } else {
+        setStatus("JARVIS is speaking...", "You can speak at the same time or interrupt.", "speaking");
     }
 }
 
@@ -107,7 +175,11 @@ async function loadHistory() {
         if (messages.length) {
             historyLabel.textContent = "Saved locally";
             messages.forEach((message) => {
-                if (message && ["user", "assistant"].includes(message.role) && typeof message.content === "string") {
+                if (
+                    message &&
+                    ["user", "assistant"].includes(message.role) &&
+                    typeof message.content === "string"
+                ) {
                     addMessage(message.role, message.content);
                 }
             });
@@ -122,35 +194,62 @@ async function loadHistory() {
 
 function sendEvent(payload) {
     if (!dataChannel || dataChannel.readyState !== "open") {
-        throw new Error("The realtime data channel is not connected.");
+        throw new Error("The live event channel is not connected.");
     }
     dataChannel.send(JSON.stringify(payload));
 }
 
-function waitForDataChannel(channel, timeoutMs = 15000) {
+function waitForIceGathering(peer, timeoutMs = 12000) {
+    if (peer.iceGatheringState === "complete") return Promise.resolve();
+
     return new Promise((resolve, reject) => {
-        if (channel.readyState === "open") {
+        const timeout = window.setTimeout(() => {
+            peer.removeEventListener("icegatheringstatechange", onState);
+            reject(new Error("Timed out while gathering the WebRTC connection details."));
+        }, timeoutMs);
+
+        function onState() {
+            if (peer.iceGatheringState !== "complete") return;
+            window.clearTimeout(timeout);
+            peer.removeEventListener("icegatheringstatechange", onState);
             resolve();
-            return;
         }
-        const timer = window.setTimeout(() => reject(new Error("Timed out waiting for the realtime session.")), timeoutMs);
-        channel.addEventListener("open", () => {
-            window.clearTimeout(timer);
+
+        peer.addEventListener("icegatheringstatechange", onState);
+        onState();
+    });
+}
+
+function waitForSessionStarted(timeoutMs = 25000) {
+    return new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+            reject(new Error("GPT-Live did not confirm that the session started."));
+        }, timeoutMs);
+
+        sessionStartedResolve = () => {
+            window.clearTimeout(timeout);
+            sessionStartedResolve = null;
+            sessionStartedReject = null;
             resolve();
-        }, { once: true });
-        channel.addEventListener("error", () => {
-            window.clearTimeout(timer);
-            reject(new Error("The realtime data channel failed to open."));
-        }, { once: true });
+        };
+
+        sessionStartedReject = (error) => {
+            window.clearTimeout(timeout);
+            sessionStartedResolve = null;
+            sessionStartedReject = null;
+            reject(error);
+        };
     });
 }
 
 async function startConversation() {
     if (connecting || connected) return;
+
     connecting = true;
+    sessionFinalized = false;
     updateControls();
     setupNote.textContent = "";
-    setStatus("Connecting to JARVIS...", "Requesting microphone access and creating a secure voice session.", "connecting");
+    setStatus("Connecting to JARVIS...", "Requesting microphone access and starting a live session.", "connecting");
 
     try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -168,83 +267,99 @@ async function startConversation() {
             }
         });
 
-        const tokenResponse = await fetch("/api/realtime/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            cache: "no-store"
-        });
-        const tokenPayload = await tokenResponse.json();
-        if (!tokenResponse.ok || !tokenPayload.value) {
-            throw new Error(tokenPayload.error || "Could not create a secure realtime session.");
-        }
-
         peerConnection = new RTCPeerConnection();
         remoteAudio = document.createElement("audio");
         remoteAudio.autoplay = true;
         remoteAudio.playsInline = true;
-        remoteAudio.setAttribute("aria-hidden", "true");
-        remoteAudio.style.display = "none";
+        remoteAudio.setAttribute("aria-label", "JARVIS voice output");
+        remoteAudio.style.position = "absolute";
+        remoteAudio.style.width = "1px";
+        remoteAudio.style.height = "1px";
+        remoteAudio.style.opacity = "0";
         document.body.appendChild(remoteAudio);
 
-        peerConnection.ontrack = (event) => {
-            remoteAudio.srcObject = event.streams[0];
+        peerConnection.addEventListener("track", (event) => {
+            remoteAudio.srcObject = new MediaStream([event.track]);
             remoteAudio.play().catch((error) => {
-                console.warn("Browser audio playback needs user interaction.", error);
-                setStatus("Audio playback blocked", "Check your browser's audio permission and try again.", "error");
+                console.warn("Browser audio playback needs a user action.", error);
+                setStatus("Audio playback blocked", "Check your browser audio permissions and try again.", "error");
             });
-        };
+        });
 
         microphoneStream.getAudioTracks().forEach((track) => {
             peerConnection.addTrack(track, microphoneStream);
         });
 
+        // GPT-Live expects its data channel to exist before the SDP offer.
         dataChannel = peerConnection.createDataChannel("oai-events");
-        dataChannel.addEventListener("message", handleRealtimeEvent);
+        dataChannel.addEventListener("message", handleLiveEvent);
         dataChannel.addEventListener("close", () => {
-            if (connected) stopConversation(false);
+            if (connected && !sessionFinalized) {
+                setStatus("Connection closed", "The live event channel ended unexpectedly.", "error");
+                cleanupSession();
+            }
         });
         dataChannel.addEventListener("error", () => {
-            setStatus("Realtime channel error", "The event channel reported an error.", "error");
+            setStatus("Live event channel error", "The session reported a transport problem.", "error");
         });
 
         peerConnection.addEventListener("connectionstatechange", () => {
             if (!peerConnection) return;
             if (peerConnection.connectionState === "failed") {
                 setStatus("Connection lost", "The network connection failed. Please reconnect.", "error");
-                stopConversation(false);
+                cleanupSession();
             } else if (peerConnection.connectionState === "disconnected" && connected) {
-                setStatus("Reconnecting...", "Waiting for the voice connection to recover.", "connecting");
+                setStatus("Connection interrupted", "Waiting for the WebRTC connection to recover.", "connecting");
             }
         });
 
+        const startedPromise = waitForSessionStarted();
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
+        await waitForIceGathering(peerConnection);
 
-        const sdpResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
+        const sdp = peerConnection.localDescription && peerConnection.localDescription.sdp;
+        if (!sdp) throw new Error("The browser did not create a WebRTC SDP offer.");
+
+        const response = await fetch("/api/live/session", {
             method: "POST",
-            body: peerConnection.localDescription.sdp,
-            headers: {
-                "Authorization": "Bearer " + tokenPayload.value,
-                "Content-Type": "application/sdp"
-            }
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sdp }),
+            cache: "no-store"
         });
-        const answerSdp = await sdpResponse.text();
-        if (!sdpResponse.ok) {
-            throw new Error("Realtime connection rejected the offer (" + sdpResponse.status + "): " + answerSdp.slice(0, 240));
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || "Could not create the GPT-Live session.");
+        }
+        if (!result.transport || typeof result.transport.sdp !== "string") {
+            throw new Error("The Live service returned an invalid WebRTC answer.");
         }
 
-        await peerConnection.setRemoteDescription({ type: "answer", sdp: answerSdp });
-        await waitForDataChannel(dataChannel);
+        sessionId = result.session && result.session.id ? result.session.id : null;
+        await peerConnection.setRemoteDescription({
+            type: "answer",
+            sdp: result.transport.sdp
+        });
 
+        await startedPromise;
         connected = true;
         connecting = false;
         updateControls();
-        setStatus("JARVIS is listening.", "Speak naturally. You can interrupt JARVIS at any time.", "connected");
+        setStatus("JARVIS is online.", "You can speak naturally, even while JARVIS is responding.", "connected");
+
+        // GPT-Live paraphrases and speaks this opening message.
+        sendEvent({
+            type: "session.commentary.append",
+            event_id: nextEventId("welcome"),
+            delegation_id: null,
+            content: "JARVIS is online. How can I help you today?"
+        });
     } catch (error) {
-        console.error("Could not start realtime voice:", error);
+        console.error("Could not start GPT-Live:", error);
         const message = error && error.message ? error.message : "An unexpected error occurred.";
+        if (sessionStartedReject) sessionStartedReject(error);
         setupNote.textContent = message;
-        await stopConversation(false);
+        cleanupSession();
         setStatus("Could not connect.", message, "error");
     } finally {
         connecting = false;
@@ -252,15 +367,24 @@ async function startConversation() {
     }
 }
 
-async function runToolCall(item) {
-    if (!item || !item.call_id || handledToolCalls.has(item.call_id)) return;
+function getNestedResponseId(nestedEvent) {
+    return (
+        nestedEvent.response_id ||
+        (nestedEvent.response && nestedEvent.response.id) ||
+        nestedEvent.id ||
+        null
+    );
+}
+
+async function runDelegatedTool(item) {
+    if (!item || !item.call_id || handledToolCalls.has(item.call_id)) return null;
     handledToolCalls.add(item.call_id);
 
-    let args;
+    let argumentsValue;
     try {
-        args = JSON.parse(item.arguments || "{}");
+        argumentsValue = JSON.parse(item.arguments || "{}");
     } catch (error) {
-        args = null;
+        argumentsValue = null;
     }
 
     let result;
@@ -268,7 +392,7 @@ async function runToolCall(item) {
         const response = await fetch("/api/tools/execute", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: item.name, arguments: args }),
+            body: JSON.stringify({ name: item.name, arguments: argumentsValue }),
             cache: "no-store"
         });
         result = await response.json();
@@ -276,7 +400,7 @@ async function runToolCall(item) {
             result = { ok: false, message: result.error || "The requested tool was rejected." };
         }
     } catch (error) {
-        result = { ok: false, message: "The tool service could not be reached." };
+        result = { ok: false, message: "The Python tool service could not be reached." };
     }
 
     if (result.browser_action && result.browser_action.type === "open_url") {
@@ -284,125 +408,157 @@ async function runToolCall(item) {
         result.message += " I added a link in the conversation for you to open.";
     }
 
-    sendEvent({
-        type: "conversation.item.create",
+    return {
+        type: "response.item.create",
+        event_id: nextEventId("tool_result"),
         item: {
             type: "function_call_output",
             call_id: item.call_id,
             output: JSON.stringify(result)
         }
-    });
+    };
 }
 
-async function handleToolCalls(response) {
-    const calls = (response.output || []).filter((item) => item.type === "function_call");
+async function finishDelegatedResponse(responseId) {
+    const batch = pendingResponses.get(responseId);
+    if (!batch || batch.completed) return;
+
+    batch.completed = true;
+    pendingResponses.delete(responseId);
+    const calls = batch.calls || [];
     if (!calls.length) return;
-    setStatus("Using a tool...", "JARVIS is running an approved assistant skill.", "connected");
-    for (const item of calls) {
-        await runToolCall(item);
+
+    setStatus("Working on your request...", "JARVIS is using an approved backend tool while the conversation remains live.", "connected");
+
+    try {
+        const outputs = await Promise.all(calls.map(runDelegatedTool));
+        outputs.filter(Boolean).forEach((output) => sendEvent(output));
+        sendEvent({
+            type: "response.create",
+            event_id: nextEventId("continue")
+        });
+        setStatus("JARVIS is listening.", "You can continue speaking while I finish the task.", "connected");
+    } catch (error) {
+        console.error("Could not return delegated tool results:", error);
+        setStatus("Tool response error", "I could not return a result to the backend agent.", "error");
     }
-    sendEvent({ type: "response.create" });
 }
 
-function handleRealtimeEvent(message) {
+function handleNestedResponseEvent(envelope) {
+    const nested = envelope.event || {};
+    const responseId = getNestedResponseId(nested);
+
+    if (nested.type === "response.created") {
+        const id = responseId || "active_" + (envelope.delegation_id || "response");
+        if (!pendingResponses.has(id)) {
+            pendingResponses.set(id, {
+                delegationId: envelope.delegation_id || null,
+                calls: [],
+                completed: false
+            });
+        }
+        return;
+    }
+
+    if (nested.type === "response.output_item.done") {
+        const item = nested.item || nested.output_item || null;
+        if (!item || item.type !== "function_call") return;
+
+        const id = responseId || "active_" + (envelope.delegation_id || "response");
+        if (!pendingResponses.has(id)) {
+            pendingResponses.set(id, {
+                delegationId: envelope.delegation_id || null,
+                calls: [],
+                completed: false
+            });
+        }
+        pendingResponses.get(id).calls.push(item);
+        return;
+    }
+
+    if (nested.type === "response.completed") {
+        const id = responseId || "active_" + (envelope.delegation_id || "response");
+        finishDelegatedResponse(id).catch((error) => {
+            console.error("Delegated response failed:", error);
+        });
+        return;
+    }
+
+    if (nested.type === "error") {
+        const message = nested.error && nested.error.message
+            ? nested.error.message
+            : "The backend agent reported an error.";
+        addMessage("assistant", "Backend task error: " + message);
+        setStatus("Backend task failed", message, "error");
+    }
+}
+
+function handleLiveEvent(message) {
     let event;
     try {
         event = JSON.parse(message.data);
     } catch (error) {
-        console.warn("Ignored malformed realtime event.", error);
+        console.warn("Ignored malformed GPT-Live event.", error);
         return;
     }
 
     switch (event.type) {
-        case "session.created":
-        case "session.updated":
-            setStatus("JARVIS is ready.", "Speak naturally. You can interrupt JARVIS at any time.", "connected");
+        case "session.started":
+            sessionId = event.session && event.session.id ? event.session.id : sessionId;
+            connected = true;
+            connecting = false;
+            updateControls();
+            setStatus("JARVIS is online.", "The live voice session is ready.", "connected");
+            if (sessionStartedResolve) sessionStartedResolve();
             break;
 
-        case "input_audio_buffer.speech_started":
-            setStatus("Listening...", "I heard you start speaking.", "connected");
-            break;
-
-        case "input_audio_buffer.speech_stopped":
-            setStatus("Thinking...", "Working on your request.", "connected");
-            break;
-
-        case "conversation.item.input_audio_transcription.delta": {
-            const itemId = event.item_id || "current-user";
-            userTranscriptByItem.set(itemId, (userTranscriptByItem.get(itemId) || "") + (event.delta || ""));
-            break;
-        }
-
-        case "conversation.item.input_audio_transcription.completed": {
-            const transcript = (event.transcript || "").trim();
-            if (!transcript) break;
-            const itemId = event.item_id || String(Date.now());
-            userTranscriptByItem.set(itemId, transcript);
-            addMessage("user", transcript, { id: "user-" + itemId });
-            persistMessage("user", transcript);
+        case "session.closed": {
+            sessionFinalized = true;
+            const usage = event.usage && Number.isFinite(event.usage.seconds)
+                ? " Session usage: " + event.usage.seconds + " seconds."
+                : "";
+            flushTranscript("user");
+            flushTranscript("assistant");
+            setStatus("Session ended.", "JARVIS has closed the live session." + usage, "idle");
+            cleanupSession();
             break;
         }
 
-        case "response.created":
-            setStatus("Thinking...", "Preparing a response.", "connected");
-            liveAssistantBubble = null;
+        case "session.input_transcript.delta":
+            appendTranscript("user", event.delta || "", event.start_ms, event.end_ms);
             break;
 
-        case "response.output_audio_transcript.delta": {
-            const itemId = event.item_id || "assistant-current";
-            const nextText = (assistantTranscriptByItem.get(itemId) || "") + (event.delta || "");
-            assistantTranscriptByItem.set(itemId, nextText);
-            if (!liveAssistantBubble || liveAssistantBubble.dataset.messageId !== "assistant-" + itemId) {
-                liveAssistantBubble = addMessage("assistant", "", { id: "assistant-" + itemId }).bubble;
-            }
-            const body = liveAssistantBubble.querySelector(".message-body");
-            if (body) body.textContent = nextText;
-            conversation.scrollTop = conversation.scrollHeight;
-            setStatus("JARVIS is speaking...", "You can speak to interrupt.", "speaking");
+        case "session.output_transcript.delta":
+            appendTranscript("assistant", event.delta || "", event.start_ms, event.end_ms);
             break;
-        }
 
-        case "response.output_audio_transcript.done": {
-            const itemId = event.item_id || "assistant-current";
-            const transcript = (event.transcript || assistantTranscriptByItem.get(itemId) || "").trim();
-            if (!transcript) break;
-            assistantTranscriptByItem.set(itemId, transcript);
-            let bubble = document.querySelector('[data-message-id="assistant-' + CSS.escape(itemId) + '"]');
-            if (!bubble) bubble = addMessage("assistant", "", { id: "assistant-" + itemId }).bubble;
-            const body = bubble.querySelector(".message-body");
-            if (body) body.textContent = transcript;
-            persistMessage("assistant", transcript);
-            setStatus("JARVIS is listening.", "Continue speaking whenever you're ready.", "connected");
+        case "session.delegation.created":
+            setStatus("JARVIS is working...", "I am handling a backend task while keeping the conversation open.", "connected");
             break;
-        }
 
-        case "response.output_text.delta": {
-            const itemId = event.item_id || "assistant-current";
-            if (!assistantTranscriptByItem.has(itemId)) {
-                const nextText = (assistantTranscriptByItem.get(itemId) || "") + (event.delta || "");
-                assistantTranscriptByItem.set(itemId, nextText);
-                if (!liveAssistantBubble) {
-                    liveAssistantBubble = addMessage("assistant", "", { id: "assistant-" + itemId }).bubble;
-                }
-                const body = liveAssistantBubble.querySelector(".message-body");
-                if (body) body.textContent = nextText;
-            }
+        case "response.event":
+            handleNestedResponseEvent(event);
             break;
-        }
 
-        case "response.done":
-            handleToolCalls(event.response || {}).catch((error) => {
-                console.error("Tool handling failed:", error);
-                setStatus("Tool error", "I could not complete an assistant action.", "error");
-            });
-            if (!(event.response && (event.response.output || []).some((item) => item.type === "function_call"))) {
-                setStatus("JARVIS is listening.", "Continue speaking whenever you're ready.", "connected");
+        case "session.usage.updated":
+            if (event.usage && Number.isFinite(event.usage.seconds)) {
+                historyLabel.textContent = "Live session · " + event.usage.seconds + "s";
             }
             break;
 
         case "error":
-            console.error("Realtime API error:", event.error);
-            setStatus("Realtime error", (event.error && event.error.message) || "The voice service reported an error.", "error");
+            console.error("GPT-Live error:", event.error);
+            if (sessionStartedReject && connecting) {
+                sessionStartedReject(new Error(
+                    (event.error && event.error.message) || "The Live session could not start."
+                ));
+            } else {
+                setStatus(
+                    "Live session error",
+                    (event.error && event.error.message) || "The voice service reported an error.",
+                    "error"
+                );
+            }
             break;
 
         default:
@@ -410,9 +566,19 @@ function handleRealtimeEvent(message) {
     }
 }
 
-async function stopConversation(updateStatus = true) {
+function cleanupSession() {
+    if (closeTimer) {
+        window.clearTimeout(closeTimer);
+        closeTimer = null;
+    }
+
+    flushTranscript("user");
+    flushTranscript("assistant");
+
     connected = false;
     connecting = false;
+    pendingResponses.clear();
+    handledToolCalls.clear();
 
     if (dataChannel) {
         try {
@@ -444,20 +610,40 @@ async function stopConversation(updateStatus = true) {
         remoteAudio = null;
     }
 
-    assistantTranscriptByItem.clear();
-    userTranscriptByItem.clear();
-    handledToolCalls.clear();
-    liveAssistantBubble = null;
-
+    sessionId = null;
     updateControls();
-    if (updateStatus) {
+}
+
+function endConversation() {
+    if (!connected || !dataChannel || dataChannel.readyState !== "open") {
+        cleanupSession();
         setStatus("Session ended.", "Start a new conversation whenever you need me.", "idle");
+        return;
+    }
+
+    listenButton.disabled = true;
+    buttonText.textContent = "Ending session...";
+    setStatus("Closing JARVIS...", "Finishing the live session and collecting final usage.", "connecting");
+
+    try {
+        sendEvent({
+            type: "session.close",
+            event_id: nextEventId("close")
+        });
+        closeTimer = window.setTimeout(() => {
+            sessionFinalized = false;
+            cleanupSession();
+            setStatus("Session closed locally.", "The service did not confirm final usage before the timeout.", "error");
+        }, 15000);
+    } catch (error) {
+        cleanupSession();
+        setStatus("Session ended.", "The connection was released.", "idle");
     }
 }
 
 listenButton.addEventListener("click", () => {
     if (connected || connecting) {
-        stopConversation();
+        endConversation();
     } else {
         startConversation();
     }
@@ -465,12 +651,20 @@ listenButton.addEventListener("click", () => {
 
 clearButton.addEventListener("click", () => {
     conversation.replaceChildren();
-    if (emptyState) {
-        conversation.appendChild(emptyState);
-    }
+    if (emptyState) conversation.appendChild(emptyState);
 });
 
 window.addEventListener("beforeunload", () => {
+    try {
+        if (dataChannel && dataChannel.readyState === "open" && connected) {
+            dataChannel.send(JSON.stringify({
+                type: "session.close",
+                event_id: nextEventId("page_close")
+            }));
+        }
+    } catch (error) {
+        // Releasing local media is more important during page shutdown.
+    }
     if (microphoneStream) microphoneStream.getTracks().forEach((track) => track.stop());
     if (peerConnection) peerConnection.close();
 });
@@ -479,10 +673,12 @@ loadHistory();
 fetch("/api/status", { cache: "no-store" })
     .then((response) => response.json())
     .then((data) => {
-        if (!data.realtime_configured) {
-            setupNote.textContent = "Realtime voice is not configured yet. Add OPENAI_API_KEY to .env and restart the Flask server.";
+        if (!data.live_configured) {
+            setupNote.textContent = "GPT-Live is not configured yet. Add OPENAI_API_KEY to .env and restart the Flask server.";
         } else {
-            setupNote.textContent = "Realtime model: " + (data.realtime_model || "configured") + ". API usage may incur charges.";
+            setupNote.textContent = "Voice: " + (data.live_model || "GPT-Live") +
+                " · Backend: " + (data.backend_model || "Responses") +
+                ". Voice duration and backend tool/model usage may incur API charges.";
         }
     })
     .catch(() => {
