@@ -114,14 +114,17 @@ def realtime_token():
             "error": "Realtime voice is not configured. Add OPENAI_API_KEY to your .env file and restart JARVIS."
         }), 503
 
+    context = _recent_context()
+    audio_input = {}
+    if REALTIME_TRANSCRIPTION_MODEL:
+        audio_input["transcription"] = {"model": REALTIME_TRANSCRIPTION_MODEL}
+
     session = {
         "type": "realtime",
         "model": REALTIME_MODEL,
-        "instructions": REALTIME_INSTRUCTIONS + ("\n\n" + _recent_context() if _recent_context() else ""),
+        "instructions": REALTIME_INSTRUCTIONS + ("\n\n" + context if context else ""),
         "audio": {
-            "input": {
-                "transcription": {"model": REALTIME_TRANSCRIPTION_MODEL}
-            },
+            "input": audio_input,
             "output": {"voice": REALTIME_VOICE},
         },
         "tools": TOOL_DEFINITIONS,
