@@ -1,11 +1,18 @@
+databases:
+  - name: jarvis-db
+    databaseName: jarvis
+    user: jarvis
+    plan: 0.1c-256mb
+    region: singapore
+
 services:
   - type: web
     name: jarvis-ai-web
     runtime: python
-    plan: free
+    plan: 0.5c-512mb
     region: singapore
     branch: main
-    autoDeploy: true
+    autoDeployTrigger: commit
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn web_server:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 120
     healthCheckPath: /healthz
@@ -20,8 +27,12 @@ services:
         value: gpt-live-1
       - key: LIVE_BACKEND_MODEL
         value: gpt-6-luna
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jarvis-db
+          property: connectionString
       - key: DATABASE_PATH
-        value: /tmp/jarvis.db
+        value: data/jarvis.db
       - key: SAVE_CONVERSATION_HISTORY
         value: "true"
       - key: SESSION_COOKIE_SECURE
