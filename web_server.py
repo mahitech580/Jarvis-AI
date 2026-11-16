@@ -20,6 +20,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from src.config import (
     ACCESS_PASSWORD,
     DATABASE_PATH,
+    DATABASE_URL,
     LIVE_BACKEND_MODEL,
     LIVE_MODEL,
     OPENAI_API_KEY,
@@ -43,7 +44,7 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=60 * 60 * 12,
 )
 
-database = Database(DATABASE_PATH)
+database = Database(DATABASE_URL or DATABASE_PATH)
 
 LIVE_VOICE_INSTRUCTIONS = """You are JARVIS, a calm, capable personal voice assistant.
 Speak warmly and naturally, using short, clear sentences. Do not sound like a
