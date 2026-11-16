@@ -1303,6 +1303,8 @@ speakerControlButton.addEventListener("click", () => {
 });
 
 clearButton.addEventListener("click", () => {
+    flushTranscript("user");
+    flushTranscript("assistant");
     conversation.replaceChildren();
     if (emptyState) conversation.appendChild(emptyState);
     historyLabel.textContent = "View cleared";
