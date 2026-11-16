@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#080b12">
-    <meta name="description" content="JARVIS real-time AI voice assistant">
+    <meta name="description" content="JARVIS full-duplex AI voice assistant">
     <title>JARVIS AI — Live Voice Assistant</title>
     <link rel="stylesheet" href="/style.css">
 </head>
@@ -33,7 +33,7 @@
                 </div>
 
                 <div class="status-copy">
-                    <p class="eyebrow">REAL-TIME VOICE SESSION</p>
+                    <p class="eyebrow">FULL-DUPLEX VOICE SESSION</p>
                     <h1 id="statusText">Ready when you are.</h1>
                     <p id="subStatus">Connect to start a natural, hands-free conversation.</p>
                 </div>
@@ -43,14 +43,14 @@
                         <span class="mic-icon" aria-hidden="true">●</span>
                         <span id="buttonText">Start conversation</span>
                     </button>
-                    <button class="secondary-button" id="clearBtn" type="button">Clear chat</button>
+                    <button class="secondary-button" id="clearBtn" type="button">Clear view</button>
                 </div>
 
                 <p class="microphone-note">
-                    Microphone permission is required. Speak naturally — JARVIS can be interrupted while speaking.
+                    Microphone permission is required. Speak naturally — JARVIS can listen while speaking and handle tasks in the background.
                 </p>
                 <p class="setup-note" id="setupNote">
-                    Live voice uses the Realtime API. Add your API key to .env and restart the server.
+                    GPT-Live voice requires a configured OpenAI API key. Add it to .env and restart the server.
                 </p>
             </section>
 
@@ -73,7 +73,7 @@
 
         <footer class="footer">
             <span>JARVIS AI</span>
-            <span>WebRTC · Speech-to-speech · Python · SQLite</span>
+            <span>GPT-Live · WebRTC · Python · SQLite</span>
             <span>Local-first application</span>
         </footer>
     </div>
