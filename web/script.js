@@ -27,6 +27,12 @@ const micControlButton = document.getElementById("micControlBtn");
 const speakerControlButton = document.getElementById("speakerControlBtn");
 const micControlText = document.getElementById("micControlText");
 const speakerControlText = document.getElementById("speakerControlText");
+const orbStage = document.getElementById("orb");
+const liveLinkLabel = document.getElementById("liveLinkLabel");
+const browserStatus = document.getElementById("browserStatus");
+const sessionMirror = document.getElementById("sessionMirror");
+const localClock = document.getElementById("localClock");
+const localDate = document.getElementById("localDate");
 
 let peerConnection = null;
 let dataChannel = null;
@@ -86,6 +92,10 @@ function setStatus(title, detail, state = "idle") {
             : (micMuted ? "MIC MUTED"
                 : (state === "listening" ? "VOICE DETECTED" : "MIC ACTIVE")));
     if (waveform) waveform.dataset.active = String(Boolean(connected && !micMuted));
+    if (liveLinkLabel) {
+        liveLinkLabel.textContent = state === "error" ? "ATTENTION"
+            : (connecting ? "CONNECTING" : (connected ? "LIVE" : "STANDBY"));
+    }
 }
 
 function updateControls() {
@@ -146,6 +156,7 @@ function startMicrophoneVisualizer(stream) {
                 bar.style.opacity = micMuted ? "0.18" : String(0.28 + amplitude * 0.68);
             });
             waveform.dataset.active = String(Boolean(connected && !micMuted));
+            if (orbStage) orbStage.style.setProperty("--voice-energy", amplitude.toFixed(3));
             visualizerFrame = window.requestAnimationFrame(draw);
         };
         draw();
@@ -167,6 +178,7 @@ function stopMicrophoneVisualizer() {
         context.close().catch((error) => console.warn("Could not close audio visualizer.", error));
     }
     if (waveform) waveform.dataset.active = "false";
+    if (orbStage) orbStage.style.setProperty("--voice-energy", "0");
     if (micStateText) micStateText.textContent = "MIC STANDBY";
 }
 
@@ -182,7 +194,9 @@ function startSessionClock() {
     sessionStartedAt = Date.now();
     const update = () => {
         if (sessionStartedAt !== null) {
-            sessionDuration.textContent = formatSessionDuration(Date.now() - sessionStartedAt);
+            const elapsed = formatSessionDuration(Date.now() - sessionStartedAt);
+            sessionDuration.textContent = elapsed;
+            if (sessionMirror) sessionMirror.textContent = elapsed;
         }
     };
     update();
@@ -196,7 +210,32 @@ function stopSessionClock() {
     }
     sessionStartedAt = null;
     sessionDuration.textContent = "00:00";
+    if (sessionMirror) sessionMirror.textContent = "00:00";
 }
+
+
+function refreshLocalClock() {
+    if (!localClock || !localDate) return;
+    const now = new Date();
+    localClock.textContent = new Intl.DateTimeFormat(undefined, {
+        hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+    }).format(now);
+    localDate.textContent = new Intl.DateTimeFormat(undefined, {
+        weekday: "short", day: "2-digit", month: "short", year: "numeric"
+    }).format(now).toUpperCase();
+}
+
+function refreshBrowserStatus() {
+    if (!browserStatus) return;
+    browserStatus.textContent = navigator.onLine ? "NETWORK ONLINE" : "NETWORK OFFLINE";
+    browserStatus.dataset.state = navigator.onLine ? "online" : "offline";
+}
+
+const localClockTimer = window.setInterval(refreshLocalClock, 1000);
+window.addEventListener("online", refreshBrowserStatus);
+window.addEventListener("offline", refreshBrowserStatus);
+refreshLocalClock();
+refreshBrowserStatus();
 
 function showLogin(message = "") {
     isAuthenticated = false;
@@ -886,6 +925,9 @@ window.addEventListener("beforeunload", () => {
     if (microphoneStream) microphoneStream.getTracks().forEach((track) => track.stop());
     stopMicrophoneVisualizer();
     stopSessionClock();
+    window.clearInterval(localClockTimer);
+    window.removeEventListener("online", refreshBrowserStatus);
+    window.removeEventListener("offline", refreshBrowserStatus);
     if (peerConnection) peerConnection.close();
 });
 
