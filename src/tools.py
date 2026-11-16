@@ -10,6 +10,8 @@ from datetime import datetime
 from urllib.parse import quote_plus
 from typing import Any
 
+from src.config import SAVE_CONVERSATION_HISTORY
+
 SITES = {
     "google": "https://www.google.com",
     "youtube": "https://www.youtube.com",
@@ -227,6 +229,8 @@ def execute_tool(name: str, arguments: Any, database: Any = None) -> dict[str, A
             }
 
         if name == "get_recent_history":
+            if not SAVE_CONVERSATION_HISTORY:
+                return {"ok": True, "messages": [], "message": "Conversation history is disabled."}
             if set(arguments) != {"limit"}:
                 raise ValueError("Expected only a limit argument.")
             if database is None:
