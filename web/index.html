@@ -3,25 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#080b12">
-    <meta name="description" content="JARVIS full-duplex AI voice assistant">
-    <title>JARVIS AI — Web Voice Assistant</title>
-    <link rel="stylesheet" href="/style.css">
+    <meta name="theme-color" content="#070b13">
+    <meta name="description" content="JARVIS — a real-time, full-duplex AI voice assistant">
+    <title>JARVIS — Live Voice Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css?v=3">
 </head>
 <body>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
     <div class="app-shell">
         <header class="topbar">
             <a class="brand" href="/" aria-label="JARVIS home">
-                <span class="brand-mark">J</span>
+                <span class="brand-mark" aria-hidden="true"><span>J</span></span>
                 <span class="brand-copy">
                     <strong>JARVIS</strong>
-                    <small>WEB VOICE ASSISTANT</small>
+                    <small>PERSONAL INTELLIGENCE</small>
                 </span>
             </a>
-            <div class="topbar-actions">
-                <div class="connection-pill" id="connectionPill" data-state="idle">
+
+            <div class="topbar-center">
+                <span class="connection-pill" id="connectionPill" data-state="idle">
                     <span class="connection-dot"></span>
-                    <span id="connectionText">Not connected</span>
+                    <span id="connectionText">Standby</span>
+                </span>
+            </div>
+
+            <div class="topbar-actions">
+                <div class="session-clock" aria-label="Session duration">
+                    <span class="clock-indicator"></span>
+                    <span id="sessionDuration">00:00</span>
                 </div>
                 <button class="logout-button hidden" id="logoutBtn" type="button">Sign out</button>
             </div>
@@ -29,82 +43,121 @@
 
         <section class="login-panel" id="loginPanel" aria-labelledby="loginTitle">
             <div class="login-mark">J</div>
-            <p class="eyebrow">PRIVATE WEB ASSISTANT</p>
-            <h1 id="loginTitle">Welcome to JARVIS</h1>
+            <p class="eyebrow">PRIVATE ACCESS</p>
+            <h1 id="loginTitle">Welcome back.</h1>
             <p class="login-description" id="loginDescription">Checking access settings...</p>
             <form id="loginForm" class="login-form">
                 <label for="passwordInput">Access password</label>
-                <input
-                    id="passwordInput"
-                    name="password"
-                    type="password"
-                    autocomplete="current-password"
-                    maxlength="256"
-                    placeholder="Enter your JARVIS password"
-                    required
-                >
-                <button class="mic-button" id="loginButton" type="submit">
-                    <span>Continue</span>
+                <input id="passwordInput" name="password" type="password" autocomplete="current-password"
+                    maxlength="256" placeholder="Enter your JARVIS password" required>
+                <button class="primary-button" id="loginButton" type="submit">
+                    <span>Continue to JARVIS</span>
+                    <span class="button-arrow" aria-hidden="true">↗</span>
                 </button>
                 <p class="login-error" id="loginError" role="alert"></p>
             </form>
-            <p class="login-footer">Only people with the access password can start a voice session.</p>
+            <p class="login-footer">Your private voice workspace. Access is protected.</p>
         </section>
 
         <main class="main-content" id="mainContent" hidden>
-            <section class="voice-panel" aria-labelledby="statusText">
-                <div class="orb-wrap" id="orb">
-                    <div class="orb-ring ring-one"></div>
-                    <div class="orb-ring ring-two"></div>
+            <section class="assistant-card voice-panel" aria-labelledby="statusText" data-state="idle">
+                <div class="assistant-card-top">
+                    <div>
+                        <p class="eyebrow">REAL-TIME VOICE SYSTEM</p>
+                        <span class="system-label"><span class="system-label-dot"></span> GPT-LIVE SESSION</span>
+                    </div>
+                    <span class="secure-label"><span aria-hidden="true">⌁</span> PRIVATE SESSION</span>
+                </div>
+
+                <div class="orb-stage" id="orb" aria-hidden="true">
+                    <div class="orb-grid"></div>
+                    <div class="orb-ring ring-outer"></div>
+                    <div class="orb-ring ring-middle"></div>
+                    <div class="orb-ring ring-inner"></div>
                     <div class="orb-core"><span>J</span></div>
+                    <div class="orb-caption">VOICE CORE</div>
                 </div>
 
                 <div class="status-copy">
-                    <p class="eyebrow">FULL-DUPLEX VOICE SESSION</p>
-                    <h1 id="statusText">Ready when you are.</h1>
-                    <p id="subStatus">Connect to start a natural, hands-free conversation.</p>
+                    <p class="eyebrow" id="stateEyebrow">READY FOR INPUT</p>
+                    <h1 id="statusText">Your assistant is ready.</h1>
+                    <p id="subStatus">Start a live session and speak naturally. No push-to-talk needed.</p>
+                </div>
+
+                <div class="waveform-wrap">
+                    <div class="waveform-labels">
+                        <span>MICROPHONE ACTIVITY</span>
+                        <span id="micStateText">MIC STANDBY</span>
+                    </div>
+                    <div class="waveform" id="waveform" data-active="false" aria-hidden="true"></div>
                 </div>
 
                 <div class="controls">
-                    <button class="mic-button" id="listenBtn" type="button">
-                        <span class="mic-icon" aria-hidden="true">●</span>
-                        <span id="buttonText">Start conversation</span>
+                    <button class="primary-button start-button" id="listenBtn" type="button">
+                        <span class="button-symbol" aria-hidden="true">◉</span>
+                        <span id="buttonText">Start live conversation</span>
+                        <span class="button-arrow" aria-hidden="true">↗</span>
                     </button>
-                    <button class="secondary-button" id="clearBtn" type="button">Clear view</button>
+                    <div class="utility-controls">
+                        <button class="utility-button" id="micControlBtn" type="button" disabled aria-pressed="false">
+                            <span class="utility-icon" aria-hidden="true">♩</span>
+                            <span id="micControlText">Mute mic</span>
+                        </button>
+                        <button class="utility-button" id="speakerControlBtn" type="button" disabled aria-pressed="false">
+                            <span class="utility-icon" aria-hidden="true">◖</span>
+                            <span id="speakerControlText">Mute speaker</span>
+                        </button>
+                    </div>
                 </div>
 
-                <p class="microphone-note">
-                    Allow microphone access. JARVIS can listen while speaking and work on delegated tasks during the conversation.
-                </p>
+                <div class="capability-row" aria-label="Voice capabilities">
+                    <span><i></i> Full duplex</span>
+                    <span><i></i> Interruptible</span>
+                    <span><i></i> Live reasoning</span>
+                </div>
+
                 <p class="setup-note" id="setupNote">
-                    GPT-Live voice requires an enabled OpenAI API project.
+                    Voice requires an enabled OpenAI API project.
                 </p>
             </section>
 
-            <section class="conversation-panel" aria-label="Conversation">
+            <section class="conversation-panel" aria-label="Live conversation transcript">
                 <div class="conversation-heading">
-                    <div>
-                        <p class="eyebrow">SESSION TRANSCRIPT</p>
+                    <div class="conversation-title">
+                        <p class="eyebrow">LIVE TRANSCRIPT</p>
                         <h2>Conversation</h2>
+                        <p>Words appear here as you speak and JARVIS responds.</p>
                     </div>
-                    <span class="history-label" id="historyLabel">History</span>
+                    <div class="transcript-actions">
+                        <span class="history-label" id="historyLabel">No saved messages</span>
+                        <button class="text-button" id="clearBtn" type="button">Clear view</button>
+                    </div>
                 </div>
-                <div class="conversation-log" id="conversation" role="log" aria-live="polite" aria-relevant="additions text">
+
+                <div class="conversation-log" id="conversation" role="log" aria-live="polite"
+                    aria-relevant="additions text">
                     <div class="empty-state" id="emptyState">
-                        <span class="empty-mark">✦</span>
-                        <p>Your conversation will appear here.</p>
+                        <div class="empty-orbit" aria-hidden="true"><span>✦</span></div>
+                        <strong>Your conversation starts here</strong>
+                        <p>Start a session, then talk to JARVIS in your own words.</p>
                     </div>
+                </div>
+
+                <div class="transcript-footer">
+                    <span class="live-indicator"></span>
+                    <span>TRANSCRIPT STREAM</span>
+                    <span class="transcript-footer-note">Audio is streamed live and is not recorded by this app.</span>
                 </div>
             </section>
         </main>
 
         <footer class="footer">
-            <span>JARVIS AI</span>
-            <span>GPT-Live · WebRTC · Python · SQLite</span>
-            <span>Browser-only application</span>
+            <span>JARVIS <span class="footer-version">WEB</span></span>
+            <span>REAL-TIME AI · WEBRTC · ENCRYPTED TRANSPORT</span>
+            <span>Browser-based voice assistant</span>
         </footer>
     </div>
 
-    <script src="/script.js" defer></script>
+    <script src="/script.js?v=3" defer></script>
 </body>
 </html>
