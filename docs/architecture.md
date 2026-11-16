@@ -79,7 +79,7 @@ The browser uses media tracks for audio and a data channel for Live events, capt
 8. When a nested response.output_item.done event contains a completed function_call, the browser calls Flask's tool endpoint. The backend validates the tool name and arguments, runs only registered functionality, and returns a JSON-safe result.
 9. The browser returns each result as response.item.create with a function_call_output item. After all calls from the backend response are returned, it sends response.create to continue delegated work.
 10. The voice model can explain the backend result while keeping the Live session open.
-11. Transcript deltas are saved locally when history is enabled. The latest text history is included in the delegated backend instructions when a new Live session starts.
+11. Transcript deltas are saved locally when history is enabled. When relevant, the delegated backend can call get_recent_history and receives prior messages as tool output, not as interpolated trusted instructions.
 12. End conversation sends session.close. The browser waits for session.closed and final usage before releasing media and transport resources; timeout/disconnect paths release local microphone resources and report unconfirmed finalization.
 
 ### Browser endpoints
@@ -151,9 +151,9 @@ The browser forwards a function name and arguments to Flask. Flask calls execute
 
 - Browser audio is streamed to GPT-Live over WebRTC. The browser app does not save raw microphone audio.
 - Transcript deltas are grouped for display and saved as text messages in data/jarvis.db.
-- At session startup, the recent text history is provided to the delegated backend as context.
+- When prior context is relevant, the delegated backend calls get_recent_history and receives the returned messages as tool output. Historical user text is not interpolated into trusted system/developer instructions.
 - The memory is a short recent-history window, not a vector database or semantic long-term memory.
-- Set SAVE_CONVERSATION_HISTORY=false to disable new transcript persistence and history injection.
+- Set SAVE_CONVERSATION_HISTORY=false to disable new transcript persistence and the recent-history tool's access to stored messages.
 - The desktop app stores user and assistant text in the same SQLite message table so browser and desktop history can be shared.
 
 ## 6. Local security boundary
