@@ -1,4 +1,4 @@
-"""Safe, allowlisted tools exposed to the JARVIS realtime agent."""
+"""Safe, allowlisted tools exposed to the JARVIS delegated live assistant."""
 
 from __future__ import annotations
 
