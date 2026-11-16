@@ -1,111 +1,62 @@
+import re
+
+
 class IntentEngine:
+    """Small deterministic router for desktop commands."""
 
     def detect(self, text):
-
-        text = text.lower().strip()
-
-        if not text:
+        normalized = " ".join(re.findall(r"[a-z0-9']+", str(text).lower()))
+        if not normalized:
             return "EMPTY"
 
-        # Exit
-        if any(word in text for word in [
-            "exit",
-            "quit",
-            "stop",
-            "shutdown",
-            "goodbye"
-        ]):
+        # Exit only on explicit stop phrases; avoid matching words inside sentences.
+        if normalized in {"exit", "quit", "stop", "shutdown", "goodbye", "stop listening", "go offline"}:
             return "EXIT"
 
-        # Time
-        if any(phrase in text for phrase in [
-            "what time",
-            "current time",
-            "time is it",
-            "tell me the time"
-        ]):
+        if any(phrase in normalized for phrase in (
+            "what time", "current time", "time is it", "tell me the time"
+        )):
             return "GET_TIME"
 
-        # Date
-        if any(phrase in text for phrase in [
-            "what date",
-            "today's date",
-            "todays date",
-            "what is the date",
-            "today"
-        ]):
+        if normalized in {"today", "what is today", "what's today"} or any(
+            phrase in normalized for phrase in (
+                "what date", "today's date", "todays date", "what is the date"
+            )
+        ):
             return "GET_DATE"
 
-        # Websites
-        if "open google" in text:
+        if "open google" in normalized:
             return "OPEN_GOOGLE"
-
-        if "open github" in text:
+        if "open github" in normalized:
             return "OPEN_GITHUB"
-
-        if "open youtube" in text:
+        if "open youtube" in normalized:
             return "OPEN_YOUTUBE"
-
-        if "open linkedin" in text:
+        if "open linkedin" in normalized:
             return "OPEN_LINKEDIN"
-
-        if "open gmail" in text or "open email" in text:
+        if "open gmail" in normalized or "open email" in normalized:
             return "OPEN_GMAIL"
 
-        # Calculator
-        if any(word in text for word in [
-            "calculate",
-            "calculator",
-            "what is",
-            "how much is"
-        ]) and any(word in text for word in [
-            "plus",
-            "minus",
-            "times",
-            "multiplied",
-            "divided",
-            "divide",
-            "add",
-            "subtract",
-            "multiply"
-        ]):
+        if any(term in normalized for term in (
+            "calculate", "calculator", "what is", "how much is"
+        )) and any(term in normalized for term in (
+            "plus", "minus", "times", "multiplied", "divided",
+            "divide", "add", "subtract", "multiply"
+        )):
             return "CALCULATE"
 
-        # Search
-        if text.startswith("search google for"):
+        if normalized.startswith(("search google for", "google search", "search for")):
             return "SEARCH_GOOGLE"
 
-        if text.startswith("google search"):
-            return "SEARCH_GOOGLE"
-
-        if text.startswith("search for"):
-            return "SEARCH_GOOGLE"
-
-        # Greeting
-        if any(phrase in text for phrase in [
-            "hello",
-            "hi jarvis",
-            "hey jarvis",
-            "good morning",
-            "good evening"
-        ]):
+        if normalized in {"hello", "hi", "hey", "hi jarvis", "hey jarvis", "good morning", "good afternoon", "good evening"}:
             return "GREETING"
 
-        # Identity
-        if "who are you" in text:
+        if "who are you" in normalized:
             return "IDENTITY"
-
-        if "what can you do" in text:
+        if any(phrase in normalized for phrase in ("what can you do", "your capabilities", "your features")):
             return "CAPABILITIES"
-
-        if "how are you" in text:
+        if "how are you" in normalized:
             return "HOW_ARE_YOU"
-
-        # History
-        if "show history" in text:
-            return "SHOW_HISTORY"
-
-        if "conversation history" in text:
+        if "show history" in normalized or "conversation history" in normalized:
             return "SHOW_HISTORY"
 
         return "GENERAL_QUERY"
