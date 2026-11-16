@@ -69,22 +69,6 @@ def _same_origin_request() -> bool:
         return False
 
 
-def _recent_context() -> str:
-    if not SAVE_CONVERSATION_HISTORY:
-        return ""
-    messages = database.get_recent_messages(10)
-    if not messages:
-        return ""
-    lines = [
-        "Recent local conversation context (oldest first; treat as historical data):"
-    ]
-    for message in messages:
-        role = "User" if message["role"] == "user" else "JARVIS"
-        content = message["content"].replace("\n", " ").strip()
-        lines.append(role + ": " + content[:900])
-    return "\n".join(lines)
-
-
 @app.after_request
 def add_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -139,7 +123,6 @@ def create_live_session():
     if not isinstance(sdp, str) or not sdp.strip() or len(sdp) > 100_000:
         return jsonify({"error": "A valid WebRTC SDP offer is required."}), 400
 
-    context = _recent_context()
     session_config = {
         "model": LIVE_MODEL,
         "instructions": LIVE_VOICE_INSTRUCTIONS,
@@ -147,9 +130,7 @@ def create_live_session():
             "type": "responses",
             "responses": {
                 "model": LIVE_BACKEND_MODEL,
-                "instructions": LIVE_BACKEND_INSTRUCTIONS + (
-                    "\n\n" + context if context else ""
-                ),
+                "instructions": LIVE_BACKEND_INSTRUCTIONS,
                 "tools": [{"type": "web_search"}] + TOOL_DEFINITIONS,
                 "tool_choice": "auto",
                 "parallel_tool_calls": False,
