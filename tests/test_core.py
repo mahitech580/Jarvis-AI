@@ -3,6 +3,42 @@ import unittest
 from src.database import Database
 
 
+class DatabaseStorageTests(unittest.TestCase):
+    def setUp(self):
+        self.database = Database(":memory:")
+
+    def tearDown(self):
+        self.database.close()
+
+    def test_recent_messages_are_returned_in_chronological_order(self):
+        self.database.save_message("user", "Hello JARVIS")
+        self.database.save_message("assistant", "Hello. How can I help?")
+        messages = self.database.get_recent_messages(10)
+
+        self.assertEqual([message["role"] for message in messages], ["user", "assistant"])
+        self.assertEqual(messages[0]["content"], "Hello JARVIS")
+        self.assertEqual(messages[1]["content"], "Hello. How can I help?")
+        self.assertTrue(messages[0]["timestamp"])
+
+    def test_recent_messages_limit_is_bounded(self):
+        for index in range(5):
+            self.database.save_message("user", f"message {index}")
+
+        messages = self.database.get_recent_messages(2)
+        self.assertEqual([message["content"] for message in messages], ["message 3", "message 4"])
+
+    def test_invalid_roles_are_rejected(self):
+        with self.assertRaises(ValueError):
+            self.database.save_message("system", "This must not be stored.")
+
+    def test_legacy_conversation_history_round_trip(self):
+        self.database.save_conversation("Hello", "greeting", "Hello there")
+        rows = self.database.get_history(1)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][1:], ("Hello", "greeting", "Hello there"))
+
+
 class HostedWebAuthTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
