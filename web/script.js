@@ -33,6 +33,12 @@ const browserStatus = document.getElementById("browserStatus");
 const sessionMirror = document.getElementById("sessionMirror");
 const localClock = document.getElementById("localClock");
 const localDate = document.getElementById("localDate");
+const messageForm = document.getElementById("messageForm");
+const messageInput = document.getElementById("messageInput");
+const sendMessageButton = document.getElementById("sendMessageBtn");
+const exportTranscriptButton = document.getElementById("exportTranscriptBtn");
+const toastRegion = document.getElementById("toastRegion");
+const quickCommandButtons = document.querySelectorAll("[data-prompt]");
 
 let peerConnection = null;
 let dataChannel = null;
@@ -53,6 +59,7 @@ let micAnalyser = null;
 let visualizerFrame = null;
 let sessionClock = null;
 let sessionStartedAt = null;
+let toastTimer = null;
 let micMuted = false;
 let speakerMuted = false;
 const activeTranscriptSegments = { user: null, assistant: null };
@@ -109,6 +116,13 @@ function updateControls() {
     speakerControlButton.setAttribute("aria-pressed", String(speakerMuted));
     micControlText.textContent = micMuted ? "Unmute mic" : "Mute mic";
     speakerControlText.textContent = speakerMuted ? "Unmute speaker" : "Mute speaker";
+    if (messageInput) {
+        messageInput.disabled = !connected;
+        messageInput.placeholder = connected
+            ? "Type to JARVIS… (Enter to send)"
+            : "Start a live session to send a text prompt";
+    }
+    if (sendMessageButton) sendMessageButton.disabled = !connected;
 }
 
 function buildWaveform() {
@@ -325,6 +339,138 @@ logoutButton.addEventListener("click", async () => {
     }
     showLogin("You have signed out.");
 });
+
+
+function showToast(message, kind = "info") {
+    if (!toastRegion) return;
+    toastRegion.replaceChildren();
+    const toast = document.createElement("div");
+    toast.className = "toast";
+    toast.dataset.kind = kind;
+    toast.textContent = message;
+    toastRegion.appendChild(toast);
+    if (toastTimer) window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => {
+        toast.remove();
+        toastTimer = null;
+    }, 3600);
+}
+
+async function sendTypedMessage(rawText) {
+    const text = String(rawText || "").trim();
+    if (!text) return;
+    if (text.length > 4000) {
+        showToast("Messages must be 4,000 characters or fewer.", "error");
+        return;
+    }
+    if (!connected || !dataChannel || dataChannel.readyState !== "open") {
+        showToast("Start a live conversation before sending a text prompt.");
+        return;
+    }
+
+    try {
+        sendEvent({
+            type: "response.item.create",
+            event_id: nextEventId("typed_message"),
+            item: {
+                type: "message",
+                role: "user",
+                content: [{ type: "input_text", text }]
+            }
+        });
+        sendEvent({
+            type: "response.create",
+            event_id: nextEventId("typed_response")
+        });
+        addMessage("user", text);
+        persistMessage("user", text);
+        if (messageInput) {
+            messageInput.value = "";
+            messageInput.style.height = "auto";
+        }
+        setStatus("Working on your message...", "Your text prompt has entered this live session. JARVIS will respond here and by voice.", "thinking");
+    } catch (error) {
+        console.error("Could not send the typed prompt to JARVIS:", error);
+        showToast(error.message || "The message could not be sent.", "error");
+    }
+}
+
+function exportVisibleTranscript() {
+    if (!conversation) return;
+    const entries = Array.from(conversation.querySelectorAll(".message")).map((message) => {
+        const label = message.querySelector(".message-label")?.textContent || "JARVIS";
+        const body = message.querySelector(".message-body")?.textContent
+            || message.querySelector("a")?.textContent
+            || "";
+        return body.trim() ? label + ": " + body.trim() : "";
+    }).filter(Boolean);
+
+    if (!entries.length) {
+        showToast("There are no visible messages to export.");
+        return;
+    }
+
+    const exportedAt = new Date().toLocaleString();
+    const contents = [
+        "JARVIS — CONVERSATION TRANSCRIPT",
+        "Exported: " + exportedAt,
+        "----------------------------------------",
+        "",
+        ...entries,
+        ""
+    ].join("\n");
+    const blob = new Blob([contents], { type: "text/plain;charset=utf-8" });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "jarvis-transcript-" + new Date().toISOString().replace(/[:.]/g, "-") + ".txt";
+    link.hidden = true;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    showToast("Transcript exported as a text file.");
+}
+
+function autosizeMessageInput() {
+    if (!messageInput) return;
+    messageInput.style.height = "auto";
+    messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + "px";
+}
+
+if (messageForm && messageInput) {
+    messageForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        sendTypedMessage(messageInput.value);
+    });
+    messageInput.addEventListener("input", autosizeMessageInput);
+    messageInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+            event.preventDefault();
+            messageForm.requestSubmit();
+        }
+    });
+}
+
+quickCommandButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+        const prompt = button.dataset.prompt || "";
+        if (!prompt) return;
+        if (connected && dataChannel && dataChannel.readyState === "open") {
+            sendTypedMessage(prompt);
+            return;
+        }
+        if (messageInput) {
+            messageInput.value = prompt;
+            autosizeMessageInput();
+        }
+        showToast("Prompt prepared. Start a live session, then send it from the conversation panel.");
+    });
+});
+
+if (exportTranscriptButton) {
+    exportTranscriptButton.addEventListener("click", exportVisibleTranscript);
+}
 
 function ensureConversationVisible() {
     if (emptyState && emptyState.isConnected) emptyState.remove();
@@ -909,6 +1055,7 @@ clearButton.addEventListener("click", () => {
     conversation.replaceChildren();
     if (emptyState) conversation.appendChild(emptyState);
     historyLabel.textContent = "View cleared";
+    showToast("Visible transcript cleared. Saved history remains unchanged.");
 });
 
 window.addEventListener("beforeunload", () => {
@@ -925,6 +1072,7 @@ window.addEventListener("beforeunload", () => {
     if (microphoneStream) microphoneStream.getTracks().forEach((track) => track.stop());
     stopMicrophoneVisualizer();
     stopSessionClock();
+    if (toastTimer) window.clearTimeout(toastTimer);
     window.clearInterval(localClockTimer);
     window.removeEventListener("online", refreshBrowserStatus);
     window.removeEventListener("offline", refreshBrowserStatus);
