@@ -869,19 +869,26 @@ function waitForIceGathering(peer, timeoutMs = 12000) {
 
 function waitForSessionStarted(timeoutMs = 25000) {
     return new Promise((resolve, reject) => {
-        const timeout = window.setTimeout(() => reject(new Error("GPT-Live did not confirm that the session started.")), timeoutMs);
-        sessionStartedResolve = () => {
-            window.clearTimeout(timeout);
-            sessionStartedResolve = null;
-            sessionStartedReject = null;
-            resolve();
+        let timeout = null;
+
+        const settle = (callback, value) => {
+            if (timeout !== null) {
+                window.clearTimeout(timeout);
+                timeout = null;
+            }
+            if (sessionStartedResolve === onStarted) sessionStartedResolve = null;
+            if (sessionStartedReject === onFailed) sessionStartedReject = null;
+            callback(value);
         };
-        sessionStartedReject = (error) => {
-            window.clearTimeout(timeout);
-            sessionStartedResolve = null;
-            sessionStartedReject = null;
-            reject(error);
-        };
+
+        const onStarted = () => settle(resolve);
+        const onFailed = (error) => settle(reject, error);
+
+        timeout = window.setTimeout(() => {
+            onFailed(new Error("GPT-Live did not confirm that the session started."));
+        }, timeoutMs);
+        sessionStartedResolve = onStarted;
+        sessionStartedReject = onFailed;
     });
 }
 
@@ -980,6 +987,10 @@ async function startConversation() {
         });
 
         const startedPromise = waitForSessionStarted();
+        // The request can fail before we reach "await startedPromise". Attach a
+        // rejection handler now to prevent an unhandled rejection; awaiting the
+        // original promise below still propagates the failure into startConversation.
+        startedPromise.catch(() => {});
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
         await waitForIceGathering(peerConnection);
