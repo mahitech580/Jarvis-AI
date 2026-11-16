@@ -72,6 +72,7 @@ let sessionStartedAt = null;
 let toastTimer = null;
 let selectedMicDeviceId = "";
 let micPermissionQuery = null;
+let micPermissionChangeHandler = null;
 let micMuted = false;
 let speakerMuted = false;
 const activeTranscriptSegments = { user: null, assistant: null };
@@ -257,9 +258,19 @@ function refreshBrowserStatus() {
     browserStatus.dataset.state = navigator.onLine ? "online" : "offline";
 }
 
+function handleNetworkChange() {
+    refreshBrowserStatus();
+    if (!connected) return;
+    if (!navigator.onLine) {
+        setStatus("Network connection interrupted.", "Waiting for the browser to reconnect. Your live session may recover automatically.", "connecting");
+    } else {
+        setStatus("Network restored.", "Checking the live voice channel and waiting for it to recover.", "connecting");
+    }
+}
+
 const localClockTimer = window.setInterval(refreshLocalClock, 1000);
-window.addEventListener("online", refreshBrowserStatus);
-window.addEventListener("offline", refreshBrowserStatus);
+window.addEventListener("online", handleNetworkChange);
+window.addEventListener("offline", handleNetworkChange);
 refreshLocalClock();
 refreshBrowserStatus();
 
@@ -424,12 +435,15 @@ async function refreshMicrophonePermission() {
         return;
     }
     try {
+        if (micPermissionQuery && micPermissionChangeHandler) {
+            micPermissionQuery.removeEventListener("change", micPermissionChangeHandler);
+        }
         micPermissionQuery = await navigator.permissions.query({ name: "microphone" });
-        const update = () => {
+        micPermissionChangeHandler = () => {
             micPermissionStatus.textContent = micPermissionQuery.state.toUpperCase();
         };
-        update();
-        micPermissionQuery.addEventListener("change", update);
+        micPermissionChangeHandler();
+        micPermissionQuery.addEventListener("change", micPermissionChangeHandler);
     } catch (error) {
         micPermissionStatus.textContent = "BROWSER MANAGED";
     }
@@ -509,6 +523,10 @@ document.addEventListener("keydown", (event) => {
         target.isContentEditable ||
         ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
     );
+    if (event.key === "Escape") {
+        closeSettingsPanel();
+        return;
+    }
     if (isTyping || event.altKey) return;
 
     if (event.key === "?" && !event.ctrlKey && !event.metaKey) {
@@ -905,6 +923,13 @@ async function startConversation() {
         }
         if (micPermissionStatus) micPermissionStatus.textContent = "GRANTED";
         await refreshAudioDevices();
+        microphoneStream.getAudioTracks().forEach((track) => {
+            track.addEventListener("ended", () => {
+                if (!connected && !connecting) return;
+                setStatus("Microphone disconnected.", "The selected input device stopped. Reconnect your microphone and start a new session.", "error");
+                stopConversation(false).catch((error) => console.warn("Could not close the session after microphone loss.", error));
+            }, { once: true });
+        });
         startMicrophoneVisualizer(microphoneStream);
 
         peerConnection = new RTCPeerConnection();
@@ -949,6 +974,8 @@ async function startConversation() {
                 cleanupSession();
             } else if (peerConnection.connectionState === "disconnected" && connected) {
                 setStatus("Connection interrupted", "Waiting for WebRTC to recover.", "connecting");
+            } else if (peerConnection.connectionState === "connected" && connected) {
+                setStatus("JARVIS is online.", "The live voice channel is active. Speak naturally or send a text prompt.", "connected");
             }
         });
 
@@ -1298,13 +1325,13 @@ window.addEventListener("beforeunload", () => {
     stopSessionClock();
     if (toastTimer) window.clearTimeout(toastTimer);
     window.clearInterval(localClockTimer);
-    window.removeEventListener("online", refreshBrowserStatus);
-    window.removeEventListener("offline", refreshBrowserStatus);
+    window.removeEventListener("online", handleNetworkChange);
+    window.removeEventListener("offline", handleNetworkChange);
     if (navigator.mediaDevices && navigator.mediaDevices.removeEventListener) {
         navigator.mediaDevices.removeEventListener("devicechange", refreshAudioDevices);
     }
-    if (micPermissionQuery && micPermissionQuery.removeEventListener) {
-        micPermissionQuery.removeEventListener("change", () => {});
+    if (micPermissionQuery && micPermissionChangeHandler) {
+        micPermissionQuery.removeEventListener("change", micPermissionChangeHandler);
     }
     if (peerConnection) peerConnection.close();
 });
