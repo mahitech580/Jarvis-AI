@@ -3,161 +3,308 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#070b13">
+    <meta name="theme-color" content="#050a12">
     <meta name="description" content="JARVIS — a real-time, full-duplex AI voice assistant">
-    <title>JARVIS — Live Voice Assistant</title>
+    <title>JARVIS — Personal Intelligence</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/style.css?v=3">
+    <link rel="stylesheet" href="/style.css?v=4">
+    <script src="/script.js?v=4" defer></script>
 </head>
 <body>
     <div class="ambient ambient-one" aria-hidden="true"></div>
     <div class="ambient ambient-two" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
 
     <div class="app-shell">
         <header class="topbar">
             <a class="brand" href="/" aria-label="JARVIS home">
-                <span class="brand-mark" aria-hidden="true"><span>J</span></span>
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 48 48" role="presentation">
+                        <circle cx="24" cy="24" r="19" />
+                        <path d="M24 10v7m0 14v7M10 24h7m14 0h7" />
+                        <path d="M28 16h-7v14h7" />
+                    </svg>
+                </span>
                 <span class="brand-copy">
-                    <strong>JARVIS</strong>
+                    <strong>JARVIS<span class="brand-period">.</span></strong>
                     <small>PERSONAL INTELLIGENCE</small>
                 </span>
             </a>
 
             <div class="topbar-center">
-                <span class="connection-pill" id="connectionPill" data-state="idle">
+                <span class="connection-pill" id="connectionPill" data-state="idle" role="status" aria-live="polite">
                     <span class="connection-dot"></span>
                     <span id="connectionText">Standby</span>
                 </span>
+                <span class="topbar-divider" aria-hidden="true"></span>
+                <span class="topbar-channel">VOICE CHANNEL <b>01</b></span>
             </div>
 
             <div class="topbar-actions">
-                <div class="session-clock" aria-label="Session duration">
+                <div class="topbar-time">
+                    <span id="localClock">--:--:--</span>
+                    <small id="localDate">LOCAL TIME</small>
+                </div>
+                <div class="session-clock" aria-label="Live session duration">
                     <span class="clock-indicator"></span>
                     <span id="sessionDuration">00:00</span>
                 </div>
+                <button class="icon-button" id="settingsToggleBtn" type="button" aria-label="Open audio settings" aria-expanded="false" title="Audio settings">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 15 .1.1a1.8 1.8 0 0 1-2.5 2.5l-.1-.1a1.8 1.8 0 0 0-3 .9v.2a1.8 1.8 0 0 1-3.6 0v-.2a1.8 1.8 0 0 0-3-.9l-.1.1a1.8 1.8 0 0 1-2.5-2.5l.1-.1a1.8 1.8 0 0 0-.9-3h-.2a1.8 1.8 0 0 1 0-3.6h.2a1.8 1.8 0 0 0 .9-3l-.1-.1a1.8 1.8 0 0 1 2.5-2.5l.1.1a1.8 1.8 0 0 0 3-.9v-.2a1.8 1.8 0 0 1 3.6 0v.2a1.8 1.8 0 0 0 3 .9l.1-.1a1.8 1.8 0 0 1 2.5 2.5l-.1.1a1.8 1.8 0 0 0 .9 3h.2a1.8 1.8 0 0 1 0 3.6h-.2a1.8 1.8 0 0 0-.9 3Z"/></svg>
+                </button>
+                <button class="icon-button help-button" id="keyboardHelpBtn" type="button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">
+                    <span>?</span>
+                </button>
                 <button class="logout-button hidden" id="logoutBtn" type="button">Sign out</button>
             </div>
         </header>
 
         <section class="login-panel" id="loginPanel" aria-labelledby="loginTitle">
-            <div class="login-mark">J</div>
-            <p class="eyebrow">PRIVATE ACCESS</p>
-            <h1 id="loginTitle">Welcome back.</h1>
+            <div class="login-mark" aria-hidden="true">
+                <svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="19"/><path d="M24 10v7m0 14v7M10 24h7m14 0h7"/><path d="M28 16h-7v14h7"/></svg>
+            </div>
+            <p class="eyebrow">SECURE ACCESS / 01</p>
+            <h1 id="loginTitle">Your intelligence, <em>awaits.</em></h1>
             <p class="login-description" id="loginDescription">Checking access settings...</p>
             <form id="loginForm" class="login-form">
-                <label for="passwordInput">Access password</label>
-                <input id="passwordInput" name="password" type="password" autocomplete="current-password"
-                    maxlength="256" placeholder="Enter your JARVIS password" required>
-                <button class="primary-button" id="loginButton" type="submit">
-                    <span>Continue to JARVIS</span>
+                <label for="passwordInput">ACCESS CREDENTIAL</label>
+                <div class="password-field">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+                    <input id="passwordInput" name="password" type="password" autocomplete="current-password"
+                        maxlength="256" placeholder="Enter your access password" required>
+                </div>
+                <button class="primary-button login-submit" id="loginButton" type="submit">
+                    <span>Initialize workspace</span>
                     <span class="button-arrow" aria-hidden="true">↗</span>
                 </button>
                 <p class="login-error" id="loginError" role="alert"></p>
             </form>
-            <p class="login-footer">Your private voice workspace. Access is protected.</p>
+            <div class="login-footnote"><span class="secure-dot"></span> Private session · Credentials stay protected</div>
         </section>
 
-        <main class="main-content" id="mainContent" hidden>
-            <section class="assistant-card voice-panel" aria-labelledby="statusText" data-state="idle">
-                <div class="assistant-card-top">
-                    <div>
-                        <p class="eyebrow">REAL-TIME VOICE SYSTEM</p>
-                        <span class="system-label"><span class="system-label-dot"></span> GPT-LIVE SESSION</span>
+        <main class="dashboard-grid" id="mainContent" hidden>
+            <aside class="system-rail" aria-label="System overview">
+                <section class="hud-card system-overview">
+                    <div class="card-heading">
+                        <span class="eyebrow">SYSTEM OVERVIEW</span>
+                        <span class="micro-tag">SYS.01</span>
                     </div>
-                    <span class="secure-label"><span aria-hidden="true">⌁</span> PRIVATE SESSION</span>
-                </div>
-
-                <div class="orb-stage" id="orb" aria-hidden="true">
-                    <div class="orb-grid"></div>
-                    <div class="orb-ring ring-outer"></div>
-                    <div class="orb-ring ring-middle"></div>
-                    <div class="orb-ring ring-inner"></div>
-                    <div class="orb-core"><span>J</span></div>
-                    <div class="orb-caption">VOICE CORE</div>
-                </div>
-
-                <div class="status-copy">
-                    <p class="eyebrow" id="stateEyebrow">READY FOR INPUT</p>
-                    <h1 id="statusText">Your assistant is ready.</h1>
-                    <p id="subStatus">Start a live session and speak naturally. No push-to-talk needed.</p>
-                </div>
-
-                <div class="waveform-wrap">
-                    <div class="waveform-labels">
-                        <span>MICROPHONE ACTIVITY</span>
-                        <span id="micStateText">MIC STANDBY</span>
+                    <div class="system-identity">
+                        <span class="mini-core" aria-hidden="true"><i></i></span>
+                        <div>
+                            <strong>JARVIS CORE</strong>
+                            <span>WEB INTELLIGENCE</span>
+                        </div>
                     </div>
-                    <div class="waveform" id="waveform" data-active="false" aria-hidden="true"></div>
-                </div>
+                    <div class="system-readout">
+                        <div><span>VOICE ENGINE</span><strong id="liveLinkLabel">STANDBY</strong></div>
+                        <div><span>TRANSPORT</span><strong>WEBRTC</strong></div>
+                        <div><span>MODE</span><strong>FULL DUPLEX</strong></div>
+                    </div>
+                    <div class="signal-status">
+                        <span class="signal-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+                        <span id="browserStatus">BROWSER READY</span>
+                    </div>
+                </section>
 
-                <div class="controls">
-                    <button class="primary-button start-button" id="listenBtn" type="button">
-                        <span class="button-symbol" aria-hidden="true">◉</span>
-                        <span id="buttonText">Start live conversation</span>
-                        <span class="button-arrow" aria-hidden="true">↗</span>
+                <section class="hud-card quick-commands">
+                    <div class="card-heading">
+                        <span class="eyebrow">QUICK COMMANDS</span>
+                        <span class="micro-tag">CMD.02</span>
+                    </div>
+                    <p class="rail-description">Start a session, then launch a prompt.</p>
+                    <button class="command-chip" type="button" data-prompt="Give me a concise briefing of today's important technology news.">
+                        <span class="command-icon">⌁</span><span><b>Daily briefing</b><small>News and updates</small></span><i>↗</i>
                     </button>
-                    <div class="utility-controls">
-                        <button class="utility-button" id="micControlBtn" type="button" disabled aria-pressed="false">
-                            <span class="utility-icon" aria-hidden="true">♩</span>
-                            <span id="micControlText">Mute mic</span>
-                        </button>
-                        <button class="utility-button" id="speakerControlBtn" type="button" disabled aria-pressed="false">
-                            <span class="utility-icon" aria-hidden="true">◖</span>
-                            <span id="speakerControlText">Mute speaker</span>
-                        </button>
+                    <button class="command-chip" type="button" data-prompt="Help me research this topic and summarize the most useful sources.">
+                        <span class="command-icon">⌕</span><span><b>Research mode</b><small>Explore a topic</small></span><i>↗</i>
+                    </button>
+                    <button class="command-chip" type="button" data-prompt="Help me plan my next steps and turn them into a clear action list.">
+                        <span class="command-icon">◈</span><span><b>Plan a task</b><small>Organize next steps</small></span><i>↗</i>
+                    </button>
+                </section>
+
+                <section class="hud-card capability-card">
+                    <div class="card-heading">
+                        <span class="eyebrow">CAPABILITIES</span>
+                        <span class="micro-tag">MOD.03</span>
                     </div>
-                </div>
+                    <div class="capability-item"><span class="capability-glyph">◉</span><span>Natural voice</span><i>LIVE</i></div>
+                    <div class="capability-item"><span class="capability-glyph">⌁</span><span>Interrupt anytime</span><i>ON</i></div>
+                    <div class="capability-item"><span class="capability-glyph">⌕</span><span>Web research</span><i>READY</i></div>
+                    <div class="capability-item"><span class="capability-glyph">▤</span><span>Live transcript</span><i>ON</i></div>
+                </section>
 
-                <div class="capability-row" aria-label="Voice capabilities">
-                    <span><i></i> Full duplex</span>
-                    <span><i></i> Interruptible</span>
-                    <span><i></i> Live reasoning</span>
+                <div class="rail-footer">
+                    <span class="secure-dot"></span>
+                    <span>SESSION DATA IS PRIVATE</span>
                 </div>
+            </aside>
 
-                <p class="setup-note" id="setupNote">
-                    Voice requires an enabled OpenAI API project.
-                </p>
+            <section class="voice-column" aria-label="JARVIS live voice controls">
+                <section class="voice-panel hud-card" data-state="idle">
+                    <div class="assistant-card-top">
+                        <div>
+                            <p class="eyebrow">REAL-TIME VOICE INTERFACE</p>
+                            <span class="system-label"><span class="system-label-dot"></span> GPT-LIVE / WEBRTC</span>
+                        </div>
+                        <span class="secure-label"><span aria-hidden="true">⌁</span> ENCRYPTED TRANSPORT</span>
+                    </div>
+
+                    <div class="orb-stage" id="orb" aria-hidden="true">
+                        <div class="orb-grid"></div>
+                        <div class="orb-crosshair crosshair-horizontal"></div>
+                        <div class="orb-crosshair crosshair-vertical"></div>
+                        <div class="orb-ring ring-outer"></div>
+                        <div class="orb-ring ring-middle"></div>
+                        <div class="orb-ring ring-inner"></div>
+                        <div class="orb-ticks"></div>
+                        <div class="orb-sweep"></div>
+                        <div class="orb-core"><span>J</span><i></i></div>
+                        <div class="orb-caption">J.A.R.V.I.S.</div>
+                        <span class="orb-coordinate coordinate-left">AUDIO / 01</span>
+                        <span class="orb-coordinate coordinate-right">CORE / ACTIVE</span>
+                    </div>
+
+                    <div class="status-copy">
+                        <p class="eyebrow" id="stateEyebrow">READY FOR INPUT</p>
+                        <h1 id="statusText">Good to have you here.</h1>
+                        <p id="subStatus">Start a live session and speak naturally. You can interrupt JARVIS at any time.</p>
+                    </div>
+
+                    <div class="waveform-wrap">
+                        <div class="waveform-labels">
+                            <span>INBOUND AUDIO SIGNAL</span>
+                            <span id="micStateText">MIC STANDBY</span>
+                        </div>
+                        <div class="waveform" id="waveform" data-active="false" aria-hidden="true"></div>
+                        <div class="waveform-scale"><span>00</span><span>VOICE ACTIVITY</span><span>100</span></div>
+                    </div>
+
+                    <div class="controls">
+                        <button class="primary-button start-button" id="listenBtn" type="button">
+                            <span class="button-symbol" aria-hidden="true">◉</span>
+                            <span id="buttonText">Start live conversation</span>
+                            <span class="button-arrow" aria-hidden="true">↗</span>
+                        </button>
+                        <div class="utility-controls">
+                            <button class="utility-button" id="micControlBtn" type="button" disabled aria-pressed="false">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5m-4 0h8"/></svg>
+                                <span id="micControlText">Mute microphone</span>
+                            </button>
+                            <button class="utility-button" id="speakerControlBtn" type="button" disabled aria-pressed="false">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6l-5 4H4Z"/><path d="M17 9a5 5 0 0 1 0 6m2.5-8.5a8.5 8.5 0 0 1 0 11"/></svg>
+                                <span id="speakerControlText">Mute speaker</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="voice-feature-strip" aria-label="Voice features">
+                        <span><i></i> FULL DUPLEX</span>
+                        <span><i></i> LIVE CAPTIONS</span>
+                        <span><i></i> BARGE-IN</span>
+                    </div>
+                    <p class="setup-note" id="setupNote">Voice requires an enabled OpenAI API project.</p>
+                </section>
+
+                <section class="lower-hud">
+                    <div class="lower-stat">
+                        <span class="stat-icon">◉</span>
+                        <div><small>SESSION DURATION</small><strong id="sessionMirror">00:00</strong></div>
+                    </div>
+                    <div class="lower-stat">
+                        <span class="stat-icon">⌁</span>
+                        <div><small>CONVERSATION MODE</small><strong>CONTINUOUS VOICE</strong></div>
+                    </div>
+                    <div class="lower-stat">
+                        <span class="stat-icon">▤</span>
+                        <div><small>TRANSCRIPT</small><strong>LIVE STREAM</strong></div>
+                    </div>
+                </section>
             </section>
 
-            <section class="conversation-panel" aria-label="Live conversation transcript">
+            <section class="conversation-panel hud-card" aria-label="Live conversation transcript">
                 <div class="conversation-heading">
                     <div class="conversation-title">
-                        <p class="eyebrow">LIVE TRANSCRIPT</p>
-                        <h2>Conversation</h2>
-                        <p>Words appear here as you speak and JARVIS responds.</p>
+                        <p class="eyebrow">SESSION FEED / 02</p>
+                        <h2>Conversation <span class="live-tag"><i></i> LIVE</span></h2>
+                        <p>Captions appear as you speak and JARVIS responds.</p>
                     </div>
                     <div class="transcript-actions">
                         <span class="history-label" id="historyLabel">No saved messages</span>
-                        <button class="text-button" id="clearBtn" type="button">Clear view</button>
+                        <div class="transcript-buttons">
+                            <button class="text-button" id="exportTranscriptBtn" type="button" title="Download transcript">Export</button>
+                            <button class="text-button" id="clearBtn" type="button" title="Clear the visible transcript">Clear view</button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="conversation-log" id="conversation" role="log" aria-live="polite"
-                    aria-relevant="additions text">
+                <div class="conversation-log" id="conversation" role="log" aria-live="polite" aria-relevant="additions text">
                     <div class="empty-state" id="emptyState">
                         <div class="empty-orbit" aria-hidden="true"><span>✦</span></div>
                         <strong>Your conversation starts here</strong>
-                        <p>Start a session, then talk to JARVIS in your own words.</p>
+                        <p>Connect to JARVIS, then talk naturally. Your live captions will appear here.</p>
+                        <span class="empty-hint">VOICE INPUT · REAL-TIME TRANSCRIPT</span>
                     </div>
                 </div>
 
                 <div class="transcript-footer">
                     <span class="live-indicator"></span>
                     <span>TRANSCRIPT STREAM</span>
-                    <span class="transcript-footer-note">Audio is streamed live and is not recorded by this app.</span>
+                    <span class="transcript-footer-note">Text history is saved when enabled. Raw audio is not stored by this app.</span>
                 </div>
+
+                <form class="message-composer" id="messageForm">
+                    <label class="sr-only" for="messageInput">Send a text message to JARVIS</label>
+                    <textarea id="messageInput" rows="1" maxlength="4000" placeholder="Type to JARVIS… (Enter to send)" disabled></textarea>
+                    <button class="send-button" id="sendMessageBtn" type="submit" aria-label="Send message" disabled>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.2 18-3.8-7.2L3 10.8 21 3Z"/><path d="M10 14 21 3"/></svg>
+                    </button>
+                </form>
+                <p class="composer-hint"><span>TEXT FALLBACK</span> Send a typed prompt through the same live session.</p>
             </section>
         </main>
 
+        <aside class="settings-panel" id="settingsPanel" hidden aria-label="Audio settings">
+            <div class="settings-heading">
+                <div><p class="eyebrow">PREFERENCES</p><h2>Audio setup</h2></div>
+                <button class="icon-button" id="settingsCloseBtn" type="button" aria-label="Close settings">×</button>
+            </div>
+            <label for="micDeviceSelect">INPUT MICROPHONE</label>
+            <select id="micDeviceSelect">
+                <option value="">System default microphone</option>
+            </select>
+            <button class="secondary-button" id="refreshDevicesBtn" type="button">Refresh devices</button>
+            <p class="settings-note" id="deviceHint">Microphone names may appear after you grant browser permission.</p>
+            <div class="settings-divider"></div>
+            <div class="settings-info"><span>VOICE TRANSPORT</span><strong>WEBRTC</strong></div>
+            <div class="settings-info"><span>MIC PERMISSION</span><strong id="micPermissionStatus">NOT REQUESTED</strong></div>
+            <div class="settings-info"><span>OUTPUT DEVICE</span><strong>DEFAULT BROWSER OUTPUT</strong></div>
+            <p class="settings-footnote">Your microphone is only opened after you start a live session or explicitly test input. The browser shows its own microphone-use indicator.</p>
+        </aside>
+
+        <dialog class="shortcut-dialog" id="shortcutDialog" aria-labelledby="shortcutTitle">
+            <div class="shortcut-heading">
+                <div><p class="eyebrow">CONTROL GUIDE</p><h2 id="shortcutTitle">Keyboard shortcuts</h2></div>
+                <button class="icon-button" id="shortcutDialogClose" type="button" aria-label="Close shortcuts">×</button>
+            </div>
+            <div class="shortcut-row"><span>Start / end live session</span><kbd>Ctrl</kbd><b>+</b><kbd>Shift</kbd><b>+</b><kbd>Space</kbd></div>
+            <div class="shortcut-row"><span>Mute / unmute microphone</span><kbd>Ctrl</kbd><b>+</b><kbd>M</kbd></div>
+            <div class="shortcut-row"><span>Mute / unmute speaker</span><kbd>Ctrl</kbd><b>+</b><kbd>Shift</kbd><b>+</b><kbd>M</kbd></div>
+            <div class="shortcut-row"><span>Export transcript</span><kbd>Ctrl</kbd><b>+</b><kbd>Shift</kbd><b>+</b><kbd>E</kbd></div>
+            <div class="shortcut-row"><span>Show this guide</span><kbd>?</kbd></div>
+            <p class="shortcut-note">Shortcuts are disabled while typing in an input or text field.</p>
+        </dialog>
+
+        <div class="toast-region" id="toastRegion" role="status" aria-live="polite"></div>
+
         <footer class="footer">
-            <span>JARVIS <span class="footer-version">WEB</span></span>
-            <span>REAL-TIME AI · WEBRTC · ENCRYPTED TRANSPORT</span>
-            <span>Browser-based voice assistant</span>
+            <span>JARVIS <span class="footer-version">WEB INTERFACE / 04</span></span>
+            <span>REAL-TIME AI <i></i> WEBRTC <i></i> PRIVATE SESSION</span>
+            <span>BUILT FOR THE NEXT CONVERSATION</span>
         </footer>
     </div>
-
-    <script src="/script.js?v=3" defer></script>
 </body>
 </html>
